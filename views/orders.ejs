@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Orders | FullStack Cafe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --accent: #e67e22; --coffee: #5d4037; }
+        .step-dot { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .step-dot.active { border-color: var(--accent); background: var(--accent); color: white; box-shadow: 0 0 15px rgba(230, 126, 34, 0.3); }
+        .step-dot.completed { border-color: #2e7d32; background: #2e7d32; color: white; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+    <%- include('partials/navbar') %>
+
+    <main class="max-w-4xl mx-auto px-4 py-12">
+        
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-10 gap-4">
+            <div>
+                <h2 class="text-3xl font-black text-[#5d4037] flex items-center gap-3">
+                    <i class="fas fa-history text-[#e67e22]"></i> Order Tracking
+                </h2>
+                <p class="text-gray-500 text-sm">Real-time updates for your active treats.</p>
+            </div>
+            <button id="manualRefresh" class="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 font-bold hover:border-orange-200 transition-all shadow-sm active:scale-95">
+                <i class="fas fa-sync-alt"></i> Refresh Now
+            </button>
+        </div>
+
+        <div id="orders-list" class="space-y-8">
+            <% if (orders && orders.length > 0) { %>
+                <% orders.forEach(order => { %>
+                    <div class="order-card bg-white rounded-3xl p-6 md:p-8 shadow-sm border-t-4 border-[#e67e22] relative" data-id="<%= order._id %>">
+                        
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                            <div>
+                                <span class="text-[10px] font-mono font-bold text-gray-400 tracking-widest uppercase bg-gray-100 px-2 py-1 rounded">ID: #<%= order._id.toString().slice(-6).toUpperCase() %></span>
+                                <p class="text-gray-800 font-black mt-2"><%= new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %></p>
+                            </div>
+                            <div id="status-badge-<%= order._id %>">
+                                <span class="px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider
+                                    <%= (order.status || 'Pending').toLowerCase() === 'pending' ? 'bg-orange-100 text-orange-600' : '' %>
+                                    <%= (order.status || '').toLowerCase() === 'preparing' ? 'bg-blue-100 text-blue-600' : '' %>
+                                    <%= (order.status || '').toLowerCase() === 'out for delivery' ? 'bg-purple-100 text-purple-600' : '' %>
+                                    <%= (order.status || '').toLowerCase() === 'delivered' ? 'bg-green-100 text-green-600' : '' %>">
+                                    <%= order.status || 'Pending' %>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="relative mb-14 mt-4 px-4">
+                            <div class="absolute top-4 left-0 right-0 h-1 bg-gray-100 z-0 rounded-full mx-10"></div>
+                            
+                            <% 
+                                const steps = ['Pending', 'Preparing', 'Out for Delivery', 'Delivered'];
+                                const currentIndex = steps.indexOf(order.status || 'Pending');
+                                const fillWidth = (currentIndex / (steps.length - 1)) * 100;
+                            %>
+
+                            <div id="line-fill-<%= order._id %>" 
+                                 class="absolute top-4 left-0 h-1 bg-[#e67e22] z-10 transition-all duration-1000 rounded-full mx-10"
+                                 style="width: <%= fillWidth %>%;">
+                            </div>
+                            
+                            <div class="flex justify-between relative z-20">
+                                <% steps.forEach((step, index) => { %>
+                                    <div class="flex flex-col items-center w-1/4">
+                                        <div id="dot-<%= order._id %>-<%= index %>" 
+                                             class="step-dot w-9 h-9 rounded-full bg-white border-2 border-gray-100 flex items-center justify-center font-bold text-sm
+                                             <%= index < currentIndex ? 'completed' : (index === currentIndex ? 'active' : 'text-gray-300') %>">
+                                            <%- index < currentIndex ? '<i class="fas fa-check text-xs"></i>' : (index + 1) %>
+                                        </div>
+                                        <p class="text-[10px] mt-3 font-bold text-gray-400 uppercase tracking-tighter text-center"><%= step %></p>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                            <div class="space-y-3">
+                                <% order.items.forEach(item => { %>
+                                    <div class="flex justify-between items-center text-sm font-bold">
+                                        <span class="text-gray-600"><%= item.name %> <span class="text-[#e67e22] ml-2">x<%= item.quantity %></span></span>
+                                        <span class="text-gray-900">₹<%= (item.price * item.quantity).toFixed(2) %></span>
+                                    </div>
+                                <% }) %>
+                            </div>
+                            
+                            <div class="mt-5 pt-5 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div class="text-center md:text-left">
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Grand Total</span>
+                                    <span class="text-2xl font-black text-[#5d4037]">₹<%= order.totalAmount.toFixed(2) %></span>
+                                </div>
+                                <button onclick="reorderItems('<%= order._id %>', event)" 
+ class="reorder-btn w-full md:w-auto px-8 py-3 bg-[#5d4037] text-white rounded-xl font-bold hover:bg-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-gray-200 active:scale-95">
+                                    <i class="fas fa-redo-alt text-xs"></i> Reorder
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <div class="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-200">
+                    <i class="fas fa-mug-hot text-5xl text-gray-200 mb-4"></i>
+                    <p class="text-gray-400 font-bold text-xl">You haven't ordered anything yet.</p>
+                    <a href="/products" class="mt-6 inline-block px-8 py-3 bg-[#e67e22] text-white rounded-xl font-bold shadow-lg shadow-orange-100">Explore Menu</a>
+                </div>
+            <% } %>
+        </div>
+    </main>
+
+    <script>
+    (function() {
+        const stepsMap = ['Pending', 'Preparing', 'Out for Delivery', 'Delivered'];
+
+        async function updateUI() {
+            const cards = document.querySelectorAll('.order-card');
+            if (cards.length === 0) return;
+
+            const refreshBtn = document.getElementById('manualRefresh');
+            if(refreshBtn) refreshBtn.querySelector('i').classList.add('fa-spin');
+
+            try {
+                for (let card of cards) {
+                    const orderId = card.dataset.id;
+                    const res = await fetch(`/orders/status/${orderId}`);
+                    const data = await res.json();
+
+                    if (data.success && data.status) {
+                        const statusIndex = stepsMap.indexOf(data.status);
+                        
+                        const badge = document.getElementById(`status-badge-${orderId}`);
+                        if(badge) {
+                            const s = data.status.toLowerCase();
+                            let colorClass = 'bg-gray-100 text-gray-600';
+                            if(s === 'pending') colorClass = 'bg-orange-100 text-orange-600';
+                            if(s === 'preparing') colorClass = 'bg-blue-100 text-blue-600';
+                            if(s === 'out for delivery') colorClass = 'bg-purple-100 text-purple-600';
+                            if(s === 'delivered') colorClass = 'bg-green-100 text-green-600';
+                            
+                            badge.innerHTML = `<span class="px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider ${colorClass}">${data.status}</span>`;
+                        }
+
+                        const fill = document.getElementById(`line-fill-${orderId}`);
+                        if(fill) fill.style.width = `${(statusIndex / (stepsMap.length - 1)) * 100}%`;
+
+                        stepsMap.forEach((_, idx) => {
+                            const dot = document.getElementById(`dot-${orderId}-${idx}`);
+                            if (!dot) return;
+                            if (idx < statusIndex) {
+                                dot.className = 'step-dot w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-sm completed';
+                                dot.innerHTML = '<i class="fas fa-check text-xs"></i>';
+                            } else if (idx === statusIndex) {
+                                dot.className = 'step-dot w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-sm active';
+                                dot.innerHTML = idx + 1;
+                            } else {
+                                dot.className = 'step-dot w-9 h-9 rounded-full bg-white border-2 border-gray-100 flex items-center justify-center font-bold text-sm text-gray-300';
+                                dot.innerHTML = idx + 1;
+                            }
+                        });
+                    }
+                }
+            } catch (err) { console.error("Poll error", err); }
+
+            if(refreshBtn) setTimeout(() => refreshBtn.querySelector('i').classList.remove('fa-spin'), 600);
+        }
+
+        // --- UPDATED REORDER LOGIC ---
+        window.reorderItems = async (orderId, event) => {
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing...`;
+
+            try {
+                const res = await fetch(`/orders/reorder/${orderId}`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    // FIX: Save the returned items into your LocalStorage cart
+                    // Note: Use 'cafe_cart' to match your cart.ejs key
+                    localStorage.setItem('cafe_cart', JSON.stringify(data.items));
+
+                    if (data.partiallyAvailable) {
+                        localStorage.setItem('reorder_notice', data.message);
+                    }
+                    
+                    // Now when we redirect, the cart page will see the products
+                    window.location.href = '/cart'; 
+                } else {
+                    alert(data.message || "Could not reorder items.");
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            } catch (err) {
+                console.error("Reorder Fetch Error:", err);
+                alert("A network error occurred. Please try again.");
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        };
+
+        const interval = setInterval(updateUI, 20000);
+        document.getElementById('manualRefresh')?.addEventListener('click', updateUI);
+        window.addEventListener('beforeunload', () => clearInterval(interval));
+        
+        updateUI();
+    })();
+    </script>
+    
+</body>
+</html>

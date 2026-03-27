@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Tray | FullStack Cafe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #e67e22; --coffee: #5d4037; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: var(--coffee); border-radius: 10px; }
+        
+        #cart-toast {
+            visibility: hidden; min-width: 280px; background: var(--coffee); color: #fff;
+            text-align: center; border-radius: 12px; padding: 16px; position: fixed;
+            z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transition: 0.3s ease;
+        }
+        #cart-toast.show { visibility: visible; bottom: 50px; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<%- include('partials/navbar') %>
+
+<main class="max-w-6xl mx-auto px-4 py-6 md:py-12">
+    <input type="hidden" id="is-user-logged-in" value="<%= user ? 'true' : 'false' %>">
+    
+    <div class="mb-8 text-center md:text-left">
+        <h2 class="text-3xl md:text-4xl font-black text-[#5d4037] inline-flex items-center gap-3">
+            <i class="fas fa-shopping-basket text-[#e67e22]"></i> Your Selection
+        </h2>
+        <p class="text-gray-500 mt-2 font-medium">Ready to checkout? Review your items below.</p>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-8">
+        <div id="cart-main-section" class="flex-1 w-full space-y-4">
+            <div id="items-wrapper">
+                </div>
+        </div>
+
+        <aside id="cart-summary-section" class="w-full lg:w-80 xl:w-96 sticky bottom-0 lg:top-24 z-10">
+            <div class="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 lg:shadow-none lg:border-2">
+                <h3 class="text-xl font-bold text-[#5d4037] mb-6 border-b pb-4">Order Summary</h3>
+                
+                <div class="space-y-3">
+                    <div class="flex justify-between text-gray-600">
+                        <span>Subtotal</span>
+                        <span id="cartSubtotal" class="font-bold text-gray-900">₹0.00</span>
+                    </div>
+                    <div class="flex justify-between text-gray-600">
+                        <span>GST (5%)</span>
+                        <span id="cartTax" class="font-bold text-gray-900">₹0.00</span>
+                    </div>
+                    <div class="pt-4 border-t flex justify-between items-end">
+                        <span class="text-gray-500 font-bold uppercase text-xs">Grand Total</span>
+                        <span id="cartGrandTotal" class="text-3xl font-black text-[#e67e22]">₹0.00</span>
+                    </div>
+                </div>
+
+                <button id="checkoutBtn" class="w-full mt-8 py-4 bg-[#e67e22] hover:bg-[#d35400] text-white rounded-xl text-lg font-black transition-all active:scale-95 shadow-lg shadow-orange-100 flex items-center justify-center gap-3">
+                    Confirm Order (COD)
+                </button>
+            </div>
+        </aside>
+    </div>
+</main>
+
+<div id="cart-toast"></div>
+
+<script>
+    const CART_KEY = 'cafe_cart';
+    const toast = document.getElementById('cart-toast');
+
+    const showToast = (msg) => {
+        toast.innerText = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    };
+
+    const getCart = () => {
+        try {
+            return JSON.parse(localStorage.getItem(CART_KEY)) || [];
+        } catch (e) {
+            return [];
+        }
+    };
+
+    const renderCart = () => {
+        const cart = getCart();
+        const wrapper = document.getElementById('items-wrapper');
+        const summary = document.getElementById('cart-summary-section');
+        let subtotal = 0;
+
+        if (cart.length === 0) {
+            summary.classList.add('hidden');
+            wrapper.innerHTML = `
+                <div class="bg-white p-12 rounded-3xl text-center shadow-sm border">
+                    <i class="fas fa-mug-hot fa-4x text-gray-200 mb-4"></i>
+                    <h3 class="text-xl font-bold text-gray-400 mt-4">Your tray is empty</h3>
+                    <a href="/products" class="mt-6 inline-block bg-[#5d4037] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#4a332c] transition-colors">Browse Menu</a>
+                </div>`;
+            return;
+        }
+
+        summary.classList.remove('hidden');
+        wrapper.innerHTML = cart.map(item => {
+            const lineTotal = item.price * item.quantity;
+            subtotal += lineTotal;
+            
+            const cleanId = String(item.productId).trim();
+            const stockWarning = (item.countInStock && item.quantity >= item.countInStock) ? 
+                `<p class="text-[10px] text-red-500 font-bold mt-1">Max stock reached</p>` : '';
+
+            return `
+                <div class="bg-white p-4 rounded-2xl border border-gray-100 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 shadow-sm hover:shadow-md transition-shadow">
+                    <img src="/images/${item.image}" class="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover" onerror="this.src='/images/default.png'">
+                    <div class="flex-1 text-center sm:text-left">
+                        <h4 class="font-black text-lg text-[#5d4037]">${item.name}</h4>
+                        <p class="text-gray-400 font-bold text-sm">₹${item.price} each</p>
+                        ${stockWarning}
+                    </div>
+                    <div class="flex items-center bg-gray-50 p-1 rounded-full border">
+                        <button onclick="changeQty('${cleanId}', -1)" class="w-10 h-10 rounded-full font-black text-[#e67e22] hover:bg-white transition-colors">
+                            <i class="fas fa-minus text-xs"></i>
+                        </button>
+                        <span class="px-4 font-black w-10 text-center">${item.quantity}</span>
+                        <button onclick="changeQty('${cleanId}', 1)" class="w-10 h-10 rounded-full font-black text-[#e67e22] hover:bg-white transition-colors">
+                            <i class="fas fa-plus text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="text-right min-w-[100px]">
+                        <p class="font-black text-xl text-[#5d4037]">₹${lineTotal.toFixed(2)}</p>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const tax = subtotal * 0.05;
+        document.getElementById('cartSubtotal').innerText = `₹${subtotal.toFixed(2)}`;
+        document.getElementById('cartTax').innerText = `₹${tax.toFixed(2)}`;
+        document.getElementById('cartGrandTotal').innerText = `₹${(subtotal + tax).toFixed(2)}`;
+    };
+
+    window.changeQty = (id, delta) => {
+        let cart = getCart();
+        const itemIndex = cart.findIndex(i => String(i.productId).trim() === String(id).trim());
+
+        if (itemIndex > -1) {
+            const item = cart[itemIndex];
+            const newQty = item.quantity + delta;
+
+            // Stock Check
+            if (delta > 0 && item.countInStock !== undefined && newQty > item.countInStock) {
+                showToast(`Sorry, only ${item.countInStock} available!`);
+                return;
+            }
+
+            if (newQty <= 0) {
+                cart.splice(itemIndex, 1);
+                showToast("Item removed from tray");
+            } else {
+                item.quantity = newQty;
+            }
+
+            localStorage.setItem(CART_KEY, JSON.stringify(cart));
+            renderCart();
+            // Optional: Update navbar badge if you have that function
+            if (window.updateCartBadge) window.updateCartBadge();
+        }
+    };
+
+    // Initial Render
+    renderCart();
+
+    // Checkout Handling
+    document.getElementById('checkoutBtn').onclick = async () => {
+        const isLoggedIn = document.getElementById('is-user-logged-in').value === 'true';
+        if (!isLoggedIn) {
+            showToast("Redirecting to login...");
+            return setTimeout(() => window.location.href = '/login?returnTo=/cart', 800);
+        }
+        
+        const cart = getCart();
+        if (cart.length === 0) return showToast("Tray is empty!");
+
+        const btn = document.getElementById('checkoutBtn');
+        btn.disabled = true;
+        const originalBtnText = btn.innerHTML;
+        btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Processing...`;
+
+        try {
+            const res = await fetch('/cart/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: cart }) 
+            });
+            
+            const data = await res.json();
+            
+            if (data.success) {
+                localStorage.removeItem(CART_KEY);
+                showToast("Order Placed Successfully!");
+                setTimeout(() => window.location.href = '/orders', 1500);
+            } else {
+                showToast(data.message || "Checkout failed");
+                btn.disabled = false;
+                btn.innerHTML = originalBtnText;
+            }
+        } catch (e) { 
+            console.error("Checkout fetch error:", e);
+            showToast("Connection Error. Try again.");
+            btn.disabled = false; 
+            btn.innerHTML = originalBtnText; 
+        }
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+    const notice = localStorage.getItem('reorder_notice');
+    if (notice) {
+        const alertDiv = document.getElementById('reorder-alert');
+        const msgP = document.getElementById('reorder-msg');
+        
+        msgP.innerText = notice;
+        alertDiv.classList.remove('hidden');
+        
+        // Clear it so it doesn't show up again on refresh
+        localStorage.removeItem('reorder_notice');
+    }
+});
+</script>
+</body>
+</html>

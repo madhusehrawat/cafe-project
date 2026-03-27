@@ -1,0 +1,202 @@
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    cafe: {
+                        main: '#5d4037',
+                        dark: '#4e342e',
+                        accent: '#e67e22',
+                        hover: '#cf711f',
+                    }
+                }
+            }
+        }
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<div id="loading-bar" class="fixed top-0 left-0 h-[3px] bg-gradient-to-r from-cafe-accent to-orange-400 z-[9999] transition-all duration-400 opacity-0 w-0 shadow-[0_0_10px_rgba(230,126,34,0.5)]"></div>
+
+<nav class="sticky top-0 z-[1000] bg-gradient-to-br from-cafe-main to-cafe-dark px-[6%] h-[70px] flex items-center justify-between text-white shadow-lg">
+    <a href="/products" class="spa-link text-xl md:text-2xl font-bold whitespace-nowrap transition-transform hover:scale-105">
+        ☕ FullStack <span class="text-cafe-accent">Cafe</span>
+    </a>
+
+    <button onclick="toggleMenu()" class="md:hidden text-2xl focus:outline-none transition-transform active:scale-90" aria-label="Toggle Menu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div id="navContainer" class="absolute md:relative top-[70px] md:top-0 left-0 w-full md:w-auto bg-cafe-main md:bg-transparent flex flex-col md:flex-row items-center gap-6 md:gap-4 p-6 md:p-0 transition-all duration-300 ease-in-out -translate-y-[150%] md:translate-y-0 opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto shadow-xl md:shadow-none">
+        
+        <div class="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
+            <% if(user && user.role === 'admin') { %>
+                <a href="/admin" class="spa-link w-full md:w-auto text-center px-4 py-2 rounded-lg hover:bg-white/10 transition-colors">Dashboard</a>
+            <% } else { %>
+                <a href="/products" class="spa-link w-full md:w-auto text-center px-4 py-2 rounded-lg hover:bg-white/10 transition-colors">Products</a>
+                <a href="/support" class="spa-link w-full md:w-auto text-center px-4 py-2 rounded-lg hover:bg-white/10 transition-colors">Support</a>
+                <a href="/orders" class="spa-link w-full md:w-auto text-center px-4 py-2 rounded-lg hover:bg-white/10 transition-colors">My Orders</a>
+            <% } %>
+        </div>
+
+        <div class="flex flex-col md:flex-row items-center gap-6 md:gap-4 w-full md:w-auto border-t md:border-none border-white/10 pt-6 md:pt-0">
+            <% if(!(user && user.role === 'admin')) { %>
+                <a href="/cart" class="spa-link relative p-2 hover:bg-white/10 rounded-full transition-colors group">
+                    <i class="fas fa-shopping-cart text-lg"></i>
+                    <span id="cartBadge" class="absolute -top-1 -right-1 bg-cafe-accent text-white text-[10px] w-4 h-4 rounded-full hidden items-center justify-center font-bold border border-cafe-main animate-bounce">0</span>
+                </a>
+            <% } %>
+
+            <% if (user) { %>
+                <div class="flex items-center gap-3 bg-white/10 px-3 py-1.5 rounded-full">
+                    <div class="w-8 h-8 bg-cafe-accent rounded-full flex items-center justify-center font-bold text-sm shadow-inner">
+                        <%= user.username.charAt(0).toUpperCase() %>
+                    </div>
+                    <span class="text-sm font-medium"><%= user.username %></span>
+                </div>
+                <button class="btn-logout bg-red-500 hover:bg-red-600 px-5 py-2 rounded-lg font-semibold text-sm transition-all active:scale-95 w-full md:w-auto">
+                    Logout
+                </button>
+            <% } else { %>
+                <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                    <a href="/login" class="spa-link text-center px-5 py-2 font-semibold hover:text-cafe-accent transition-colors">Login</a>
+                    <a href="/signup" class="spa-link text-center bg-cafe-accent hover:bg-cafe-hover px-6 py-2 rounded-lg font-semibold transition-all shadow-md active:scale-95">Signup</a>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</nav>
+
+<script>
+// --- UI Logic ---
+function toggleMenu() {
+    const nav = document.getElementById('navContainer');
+    const isHidden = nav.classList.contains('-translate-y-[150%]');
+    
+    if (isHidden) {
+        nav.classList.remove('-translate-y-[150%]', 'opacity-0', 'pointer-events-none');
+        nav.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+    } else {
+        nav.classList.add('-translate-y-[150%]', 'opacity-0', 'pointer-events-none');
+        nav.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+    }
+}
+
+window.updateCartBadge = function() {
+    const badge = document.getElementById('cartBadge');
+    if (!badge) return; 
+    const cart = JSON.parse(localStorage.getItem('cafe_cart')) || [];
+    const count = cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'flex' : 'none';
+};
+
+const loader = {
+    bar: document.getElementById('loading-bar'),
+    start() { 
+        this.bar.style.width = '30%'; 
+        this.bar.classList.remove('opacity-0');
+        this.bar.classList.add('opacity-100');
+    },
+    stop() { 
+        this.bar.style.width = '100%';
+        setTimeout(() => { 
+            this.bar.classList.replace('opacity-100', 'opacity-0');
+            setTimeout(() => { this.bar.style.width = '0%'; }, 400);
+        }, 300);
+    }
+};
+
+// --- SPA Navigation Logic ---
+async function navigate(url, isBack = false) {
+    const content = document.getElementById('app-content');
+    if (!content) return window.location.href = url;
+
+    try {
+        loader.start();
+        const res = await fetch(url);
+        if (res.redirected) return window.location.href = res.url;
+        
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newHtml = doc.getElementById('app-content');
+
+        if (newHtml) {
+            content.style.opacity = '0';
+            setTimeout(() => {
+                content.innerHTML = newHtml.innerHTML;
+                if (!isBack) window.history.pushState({}, '', url);
+                document.title = doc.title;
+                
+                // Re-execute scripts in new content
+                content.querySelectorAll('script').forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(a => newScript.setAttribute(a.name, a.value));
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.replaceWith(newScript);
+                });
+
+                window.updateCartBadge();
+                content.style.opacity = '1';
+                window.scrollTo(0, 0);
+                loader.stop();
+            }, 150);
+        } else {
+            window.location.href = url;
+        }
+    } catch (e) { 
+        console.error("SPA Error:", e);
+        window.location.href = url; 
+    }
+}
+
+// --- Event Listeners ---
+document.addEventListener('click', async e => {
+    const link = e.target.closest('.spa-link');
+    const logoutBtn = e.target.closest('.btn-logout');
+
+    // Handle Logout
+    if (logoutBtn) {
+        e.preventDefault();
+        const result = await Swal.fire({
+            title: 'Leaving so soon?',
+            text: "Are you sure you want to logout?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e67e22',
+            cancelButtonColor: '#5d4037',
+            confirmButtonText: 'Yes, logout'
+        });
+
+        if (result.isConfirmed) {
+            loader.start();
+            try {
+                const res = await fetch('/logout', { headers: { 'Accept': 'application/json' } });
+                const data = await res.json();
+                if (data.success) window.location.href = data.redirectUrl || '/login';
+            } catch (err) {
+                window.location.href = '/logout';
+            }
+        }
+        return;
+    }
+
+    // Handle SPA Links
+    if (!link || !link.href.startsWith(window.location.origin)) return;
+    
+    // Close mobile menu on link click
+    const nav = document.getElementById('navContainer');
+    nav.classList.add('-translate-y-[150%]', 'opacity-0', 'pointer-events-none');
+    nav.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+
+    e.preventDefault();
+    navigate(link.href);
+});
+
+window.onpopstate = () => navigate(window.location.href, true);
+document.addEventListener('DOMContentLoaded', () => {
+    window.updateCartBadge();
+});
+</script>

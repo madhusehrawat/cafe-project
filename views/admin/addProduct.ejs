@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Product | FullStack Cafe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <script>
+        // Customizing Tailwind with your project colors
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        coffee: '#5d4037',
+                        accent: '#e67e22',
+                        accentDark: '#d35400',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased">
+
+<div class="max-w-2xl mx-auto my-12 px-4">
+    <div class="bg-white p-8 md:p-10 rounded-2xl shadow-xl border border-slate-200">
+        <div class="mb-8 border-b border-slate-100 pb-6">
+            <h2 class="text-3xl font-extrabold text-coffee flex items-center gap-2">
+                <span>☕</span> Add New Product
+            </h2>
+            <p class="text-slate-500 text-sm mt-2">Enter details to list a new item on the FullStack Cafe menu.</p>
+        </div>
+
+        <form action="/admin/products/add" method="POST" enctype="multipart/form-data" class="space-y-6">
+            
+            <div class="flex flex-col gap-2">
+                <label for="name" class="font-bold text-coffee text-sm uppercase tracking-wide">Product Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g. Hazelnut Latte" required
+                    class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all">
+            </div>
+            
+            <div class="flex flex-col gap-2">
+                <label for="image" class="font-bold text-coffee text-sm uppercase tracking-wide">Product Image</label>
+                <input type="file" id="image" name="image" accept="image/*" required onchange="previewImage(event)"
+                    class="w-full px-4 py-2 border border-dashed border-slate-300 rounded-lg cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-accent/10 file:text-accent hover:file:bg-accent/20 transition-all">
+                <img id="imagePreview" src="" alt="Preview" 
+                    class="hidden mt-4 w-full h-52 object-cover rounded-xl border-2 border-slate-100 shadow-inner">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col gap-2">
+                    <label for="price" class="font-bold text-coffee text-sm uppercase tracking-wide">Price (₹)</label>
+                    <input type="number" id="price" name="price" step="0.01" placeholder="0.00" required
+                        class="px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none">
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="category" class="font-bold text-coffee text-sm uppercase tracking-wide">Category</label>
+                    <select id="category" name="category" required
+                        class="px-4 py-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none cursor-pointer">
+                        <option value="" disabled selected>Select Category</option>
+                        <option value="coffee">Coffee</option>
+                        <option value="drinks">Drinks</option>
+                        <option value="junk food">Junk Food</option>
+                        <option value="salad">Salad</option>
+                        <option value="dessert">Dessert</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="description" class="font-bold text-coffee text-sm uppercase tracking-wide">Description</label>
+                <textarea id="description" name="description" rows="3" placeholder="Describe flavor notes or ingredients..."
+                    class="px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none resize-none"></textarea>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="countInStock" class="font-bold text-coffee text-sm uppercase tracking-wide">Initial Stock</label>
+                <input type="number" id="countInStock" name="countInStock" value="50" required
+                    class="px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none">
+            </div>
+
+            <div class="flex items-center gap-3 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                <input type="checkbox" id="isActive" name="isActive" checked 
+                    class="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent cursor-pointer">
+                <label for="isActive" class="text-sm font-semibold text-slate-700 cursor-pointer">Visible to customers immediately</label>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                <a href="/admin/dashboard" 
+                    class="order-2 sm:order-1 flex-1 py-3 px-6 text-center text-slate-600 font-bold bg-slate-100 rounded-xl hover:bg-slate-200 transition-all">
+                    Cancel
+                </a>
+                <button type="submit" 
+                    class="order-1 sm:order-2 flex-[2] py-3 px-6 text-white font-bold bg-accent rounded-xl hover:bg-accentDark shadow-lg shadow-accent/20 transform hover:-translate-y-0.5 transition-all">
+                    Add to Menu
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function previewImage(event) {
+        const reader = new FileReader();
+        const output = document.getElementById('imagePreview');
+        reader.onload = function() {
+            output.src = reader.result;
+            output.classList.remove('hidden');
+        }
+        reader.readAsDataURL(event.target.files[0]);
+    }
+</script>
+
+</body>
+</html>

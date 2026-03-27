@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Denied | Full Stack Café</title>
+    <style>
+        :root {
+            --primary-red: #b91c1c;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --bg-gray: #f3f4f6;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .error-container {
+            text-align: center;
+            background-color: white;
+            padding: 3rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        h2 {
+            color: var(--text-dark);
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin: 0 0 0.75rem 0;
+        }
+
+        p {
+            color: var(--text-light);
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+
+        .back-btn {
+            display: inline-block;
+            background-color: var(--primary-red);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        .back-btn:hover {
+            background-color: #991b1b;
+        }
+
+        .back-btn:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <span class="icon">🚫</span>
+        <h2>Admin Access Required</h2>
+        <p>You don't have permission to view the Canteen Command Center. Please contact the manager if you believe this is an error.</p>
+        <a href="/products" class="back-btn">Go Back to Menu</a>
+    </div>
+</body>
+</html>
