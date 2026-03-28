@@ -10,46 +10,53 @@ exports.getProductsPage = async (req, res) => {
         const search = req.query.search || "";
         const category = req.query.category || "";
         const availability = req.query.availability || ""; 
+        const sortParam = req.query.sort || "newest"; // Capture sort parameter
 
         // 2. Build the Filter Object
-        // We only show products where isActive is true
         let filter = { isActive: true };
 
-        // Search Filter (Case-insensitive)
         if (search) {
             filter.name = { $regex: search, $options: "i" };
         }
 
-        // Category Filter
         if (category && category !== "") {
             filter.category = category;
         }
 
-        // Availability Logic
         if (availability === "instock") {
             filter.countInStock = { $gt: 0 };
         } else if (availability === "outofstock") {
             filter.countInStock = { $lte: 0 };
         }
 
-        // 3. Database Execution
+        // 3. DEFINE DYNAMIC SORTING LOGIC
+        let sortOrder = { createdAt: -1 }; // Default
+
+        if (sortParam === "priceAsc") {
+            sortOrder = { price: 1 };  // Low to High
+        } else if (sortParam === "priceDesc") {
+            sortOrder = { price: -1 }; // High to Low
+        } else if (sortParam === "newest") {
+            sortOrder = { createdAt: -1 };
+        }
+
+        // 4. Database Execution
         const totalItems = await Product.countDocuments(filter);
-        const totalPages = Math.ceil(totalItems / limit) || 1; // Default to 1 if no items
-        
-        // Ensure current page doesn't exceed total pages after filtering
+        const totalPages = Math.ceil(totalItems / limit) || 1;
         const currentPage = page > totalPages ? totalPages : page;
 
         const items = await Product.find(filter)
-            .sort({ createdAt: -1 }) // Show newest items first
+            .sort(sortOrder) // <--- Applied dynamic sort here
             .skip((currentPage - 1) * limit)
             .limit(limit);
 
-        // 4. Render with all filter states
+        // 5. Render with all filter states (including sort)
         res.render("products", {
             items,
             search,
             category,
             availability,
+            sort: sortParam, // Pass this back to keep the dropdown selection
             currentPage,
             totalPages,
             user: req.user || null
@@ -60,7 +67,6 @@ exports.getProductsPage = async (req, res) => {
         res.status(500).send("Internal Server Error");
     }
 };
-
 // POST /admin/add-product (For reference)
 exports.postAddProduct = async (req, res) => {
     try {

@@ -228,24 +228,39 @@
         if(window.updateCartBadge) window.updateCartBadge();
     }
 
-    async function loadProducts(params = {}) {
-        const refreshZone = document.getElementById('refresh-zone');
-        const urlParams = new URLSearchParams(window.location.search);
-        Object.keys(params).forEach(k => {
-            if (params[k] === '') urlParams.delete(k);
-            else urlParams.set(k, params[k]);
-        });
-        const newUrl = `/products?${urlParams.toString()}`;
-        refreshZone.style.opacity = '0.4';
-        try {
-            const res = await fetch(newUrl);
-            const html = await res.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            refreshZone.innerHTML = doc.getElementById('refresh-zone').innerHTML;
-            window.history.pushState({}, '', newUrl);
-        } catch (e) { console.error(e); }
-        refreshZone.style.opacity = '1';
+   async function loadProducts(params = {}) {
+    const refreshZone = document.getElementById('refresh-zone');
+    
+    // Get current filters from the URL so we don't lose them
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Merge new params into existing ones
+    Object.keys(params).forEach(k => {
+        if (params[k] === '') {
+            urlParams.delete(k);
+        } else {
+            urlParams.set(k, params[k]);
+        }
+    });
+
+    const newUrl = `/products?${urlParams.toString()}`;
+    refreshZone.style.opacity = '0.4';
+
+    try {
+        const res = await fetch(newUrl);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        
+        // Update the grid and pagination
+        document.getElementById('refresh-zone').innerHTML = doc.getElementById('refresh-zone').innerHTML;
+        
+        // Update the browser URL without refreshing the page
+        window.history.pushState({}, '', newUrl);
+    } catch (e) { 
+        console.error("Failed to load products:", e); 
     }
+    refreshZone.style.opacity = '1';
+}
 
     function triggerSearch() {
         loadProducts({ search: document.getElementById('searchInput').value, page: 1 });
