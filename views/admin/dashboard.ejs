@@ -155,7 +155,7 @@
                 <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i class="fas fa-comment-dots"></i></div>
             </div>
             <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Feedback</p>
-            <h3 class="text-2xl font-black text-slate-800 mt-1" id="stat-feedback"><%= feedbacks.length %></h3>
+            <span id="feedback-count"><%= feedbacks.length %></span>
         </div>
     </div>
 
@@ -280,9 +280,9 @@
                         <div class="bg-slate-50 p-4 rounded-2xl text-sm font-medium text-slate-600 italic">
                             "<%= item.message %>"
                         </div>
-                        <button onclick="deleteFeedback('<%= item._id %>')" class="absolute top-4 right-4 text-slate-200 hover:text-red-500 transition-colors">
-                            <i class="fas fa-trash-alt text-xs"></i>
-                        </button>
+                        <button onclick="deleteFeedback('<%= item._id %>', event)" class="absolute top-4 right-4 text-slate-200 hover:text-red-500 transition-colors">
+    <i class="fas fa-trash-alt text-xs"></i>
+</button>
                     </div>
                 <% }) %>
             </div>
@@ -536,6 +536,51 @@ function updateBadgeUI(badge, stock) {
         for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
         return outputArray;
     }
+
+   async function deleteFeedback(id, event) {
+    // 'event.currentTarget' is the button itself
+    const button = event.currentTarget;
+    const card = button.closest('.group'); 
+
+    openConfirmModal("Delete Feedback?", "Are you sure?", async () => {
+        try {
+            // Add a "loading" state to the trash icon
+            const icon = button.querySelector('i');
+            icon.className = 'fas fa-spinner fa-spin text-xs';
+
+            const res = await fetch(`/admin/feedback/delete/${id}`, { 
+                method: 'DELETE' 
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                showToast("Feedback removed");
+
+                // 1. Update Counter
+                const countElement = document.getElementById('feedback-count');
+                if (countElement) {
+                    let currentCount = parseInt(countElement.innerText);
+                    countElement.innerText = Math.max(0, currentCount - 1);
+                }
+
+                // 2. Animate and Remove Card
+                if (card) {
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    card.style.transition = 'all 0.3s ease';
+                    setTimeout(() => card.remove(), 300);
+                }
+            } else {
+                showToast(data.message || "Delete failed");
+                icon.className = 'fas fa-trash-alt text-xs'; // Reset icon on failure
+            }
+        } catch (err) {
+            showToast("Network Error");
+            console.error(err);
+            if (icon) icon.className = 'fas fa-trash-alt text-xs';
+        }
+    });
+}
 </script>
 </body>
 </html>

@@ -1,8 +1,9 @@
+const webpush = require("web-push");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const User = require("../models/User");
 const Feedback = require("../models/Feedback"); 
-const { sendNotification } = require('./notificationController');
+
 
 /**
  * Helper: Calculates business metrics
@@ -69,31 +70,48 @@ exports.getDashboardData = async (req, res) => {
 
 // 3. Update Order Status + WebPush Notification
 exports.updateOrderStatus = async (req, res) => {
-    try {
-        const { orderId, status } = req.body;
-        
-        const updatedOrder = await Order.findByIdAndUpdate(
-            orderId, 
-            { status: status }, 
-            { new: true }
-        ).populate("user");
+  try {
+    const { orderId, status } = req.body;
 
-        if (!updatedOrder) return res.status(404).json({ success: false, message: "Order not found" });
+    // 1. Update order and populate user to get their subscription
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      { status },
+      { new: true }
+    ).populate("user");
 
-        // WebPush Notification Trigger
-        // Sends notification to the CUSTOMER when status changes
-        if (updatedOrder.user) {
-            const title = `Order Update: ${status}`;
-            const body = `Your order #${orderId.toString().slice(-6)} is now ${status}.`;
-            
-            // This assumes your notificationController handles the web-push logic
-            sendNotification(updatedOrder.user._id, title, body);
-        }
-
-        res.json({ success: true, message: "Status updated", status: updatedOrder.status });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Server error." });
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
     }
+
+    // 2. Check if the user exists and has an active subscription
+    if (order.user && order.user.pushSubscription) {
+      // We wrap the URL in a 'data' object so sw.js can read it for 'notificationclick'
+      const payload = JSON.stringify({
+        title: "Order Update! 🍔",
+        body: `Hey ${order.user.username}, your order status is now: ${status}`,
+        icon: "/icons/favicon.png",
+        data: {
+          url: "/orders", // This allows the user to click the notification to see details
+        },
+      });
+
+      webpush
+        .sendNotification(order.user.pushSubscription, payload)
+        .catch((err) => {
+          console.error("Push Notification Failed:", err);
+          // If the endpoint is no longer valid (expired), consider nullifying it
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            order.user.pushSubscription = null;
+            order.user.save();
+          }
+        });
+    }
+
+    res.json({ success: true, message: `Order status updated to ${status}` });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update status: " + err.message });
+  }
 };
 
 // 4. Update Any Product Field (Name, Price, etc.)
@@ -106,11 +124,7 @@ exports.updateProductField = async (req, res) => {
             updateValue = Number(value);
         }
 
-        const product = await Product.findByIdAndUpdate(
-            productId,
-            { [field]: updateValue },
-            { new: true }
-        );
+        const product = await Product.findByIdAndUpdate(productId, { [field]: updateValue }, { returnDocument: 'after' });
 
         res.json({ success: true, message: `${field} updated`, product });
     } catch (err) {
@@ -133,9 +147,19 @@ exports.toggleProductStatus = async (req, res) => {
 // 6. Delete Feedback
 exports.deleteFeedback = async (req, res) => {
     try {
-        await Feedback.findByIdAndDelete(req.params.id);
+        const deletedFeedback = await Feedback.findByIdAndDelete(req.params.id);
+
+        // Check if the feedback actually existed
+        if (!deletedFeedback) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "Feedback not found or already deleted" 
+            });
+        }
+
         res.json({ success: true, message: "Feedback removed" });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Delete failed" });
+        console.error("Delete Error:", err);
+        res.status(500).json({ success: false, message: "Server error during deletion" });
     }
 };

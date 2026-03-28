@@ -9,15 +9,36 @@
     <style>
         :root { --coffee: #5d4037; --accent: #e67e22; }
         .focus-ring:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.1); }
+        
+        /* Shake Animation for errors */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .shake { animation: shake 0.4s ease-in-out; }
     </style>
 </head>
-<body class="bg-[#fcf8f5] font-sans antialiased text-gray-900">
+<body class="bg-[#fcf8f5] font-sans antialiased text-gray-900 overflow-x-hidden">
+
+    <div id="errorPopup" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] hidden flex items-center gap-4 bg-white border-l-4 border-red-500 px-6 py-4 rounded-2xl shadow-2xl transition-all duration-500 transform translate-y-32">
+        <div class="bg-red-50 p-2 rounded-full text-red-500">
+            <i class="fas fa-exclamation-triangle text-lg"></i>
+        </div>
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 leading-none mb-1">Login Error</p>
+            <p id="errorPopupMsg" class="text-sm font-bold text-slate-800">Invalid credentials</p>
+        </div>
+        <button onclick="hidePopup()" class="ml-4 text-gray-300 hover:text-gray-500">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
 
     <%- include('partials/navbar', { user: locals.user || null }) %>
 
     <main class="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12">
         
-        <div class="w-full max-w-md bg-white rounded-3xl p-8 md:p-10 shadow-xl shadow-brown-100/10 border border-gray-100">
+        <div id="loginCard" class="w-full max-w-md bg-white rounded-3xl p-8 md:p-10 shadow-xl shadow-brown-100/10 border border-gray-100 transition-transform">
             
             <div class="text-center mb-10">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-orange-50 rounded-full mb-4">
@@ -86,13 +107,58 @@
         togglePassword.addEventListener('click', function() {
             const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
             passwordInput.setAttribute('type', type);
-            
-            // Toggle Icon Class
             eyeIcon.classList.toggle('fa-eye');
             eyeIcon.classList.toggle('fa-eye-slash');
         });
 
-        // --- 2. Login Form Handling ---
+        // --- 2. Popup Control Logic (Bottom Placement) ---
+        let popupTimeout;
+
+        function showPopup(message) {
+            const popup = document.getElementById('errorPopup');
+            const msgContainer = document.getElementById('errorPopupMsg');
+            const card = document.getElementById('loginCard');
+
+            msgContainer.textContent = message;
+            
+            // Remove hidden and slide UP from bottom
+            popup.classList.remove('hidden');
+            setTimeout(() => {
+                popup.classList.remove('translate-y-32');
+                popup.classList.add('translate-y-0');
+            }, 10);
+
+            // Add shake effect to login card
+            card.classList.add('shake');
+            setTimeout(() => card.classList.remove('shake'), 400);
+
+            // Auto-hide after 5 seconds
+            if (popupTimeout) clearTimeout(popupTimeout);
+            popupTimeout = setTimeout(hidePopup, 5000);
+        }
+
+        function hidePopup() {
+            const popup = document.getElementById('errorPopup');
+            popup.classList.add('translate-y-32');
+            popup.classList.remove('translate-y-0');
+            setTimeout(() => {
+                popup.classList.add('hidden');
+            }, 500);
+        }
+
+        // --- 3. Helper: Convert VAPID Key ---
+        function urlBase64ToUint8Array(base64String) {
+            const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        // --- 4. Login Form Handling ---
         const loginForm = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
 
@@ -102,18 +168,35 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
-            // Loading state
             submitBtn.disabled = true;
             submitBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Checking...`;
 
-            // Capture returnTo
+            let subscription = null;
+
+            // Attempt to get Push Subscription
+            try {
+                if ('serviceWorker' in navigator && 'PushManager' in window) {
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'granted') {
+                        const publicVapidKey = "<%= process.env.PUBLIC_VAPID_KEY %>";
+                        subscription = await registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                        });
+                    }
+                }
+            } catch (pushErr) {
+                console.warn("Push subscription failed:", pushErr);
+            }
+
             const urlParams = new URLSearchParams(window.location.search);
             const returnTo = urlParams.get('returnTo') || '';
 
             try {
                 const res = await fetch(`/login?returnTo=${encodeURIComponent(returnTo)}`, {
                     method: 'POST',
-                    body: JSON.stringify({ email, password }),
+                    body: JSON.stringify({ email, password, subscription }), 
                     headers: { 'Content-Type': 'application/json' }
                 });
 
@@ -122,12 +205,12 @@
                 if (data.success) {
                     window.location.assign(data.redirectUrl || '/'); 
                 } else {
-                    alert(data.error || "Login failed. Check your email/password.");
+                    showPopup(data.error || "Login failed. Check your email/password.");
                     resetBtn();
                 }
             } catch (err) {
                 console.error("Login Error:", err);
-                alert("Connection error. Try again.");
+                showPopup("Connection error. Please try again.");
                 resetBtn();
             }
         });

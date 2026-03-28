@@ -1,9 +1,9 @@
+const webpush = require("web-push");
 const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
 const mongoose = require("mongoose");
-const { sendNotification } = require('./notificationController');
-
+const User = require("../models/User");
 
 /**
  * 1. Admin: Get Dashboard (The page itself)
@@ -166,11 +166,14 @@ exports.handleReorder = async (req, res) => {
 /**
  * 7. Admin: Update Order Status & Stock + PUSH NOTIFICATIONS
  */
+/**
+ * 7. Admin: Update Order Status & Stock + PUSH NOTIFICATIONS
+ */
 exports.updateOrderStatus = async (req, res) => {
     try {
         const { orderId, status } = req.body;
         
-        // Populate 'user' so we can access their subscription details
+        // Populate 'user' to get the pushSubscription object
         const order = await Order.findById(orderId).populate('user');
         if (!order) return res.status(404).json({ success: false, message: "Order not found." });
 
@@ -178,14 +181,12 @@ exports.updateOrderStatus = async (req, res) => {
         const newStatus = (status || "").toLowerCase();
 
         // --- 1. STOCK LOGIC ---
-        // DEDUCT STOCK: Moving from Pending to an active state
         if (oldStatus === 'pending' && ['preparing', 'out for delivery', 'delivered'].includes(newStatus)) {
             for (const item of order.items) {
                 await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: -item.quantity } });
             }
         }
 
-        // RESTORE STOCK: Moving from active state back to Cancelled or Pending
         if (['preparing', 'out for delivery', 'delivered'].includes(oldStatus) && (newStatus === 'cancelled' || newStatus === 'pending')) {
             for (const item of order.items) {
                 await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: item.quantity } });
@@ -197,10 +198,11 @@ exports.updateOrderStatus = async (req, res) => {
         await order.save();
 
         // --- 3. PUSH NOTIFICATION LOGIC ---
-        // Only send if the status actually changed and the user exists
-        if (oldStatus !== newStatus && order.user) {
+        if (oldStatus !== newStatus && order.user && order.user.pushSubscription) {
             let message = "";
+            let title = "Order Update - FullStack Café";
             
+            // Customize message based on status
             switch(newStatus) {
                 case 'preparing':
                     message = "Your delicious order is now being prepared! ☕";
@@ -212,19 +214,32 @@ exports.updateOrderStatus = async (req, res) => {
                     message = "Enjoy your meal! Your order has been delivered. ✅";
                     break;
                 case 'cancelled':
-                    message = "Your order has been cancelled. Please contact us for details.";
+                    message = "Your order has been cancelled. Please contact us for details. ❌";
                     break;
+                default:
+                    message = `Your order status has changed to: ${status}`;
             }
 
-            if (message) {
-                // Call the helper from your notificationController
-                // Pass the user ID, Title, and the Message body
-                sendNotification(
-                    order.user._id, 
-                    "Order Update - FullStack Cafe", 
-                    message
-                ).catch(err => console.error("Notification trigger failed:", err));
-            }
+            // Construct the payload for sw.js
+            const payload = JSON.stringify({
+                title: title,
+                body: message,
+                icon: "/icons/favicon.png",
+                data: {
+                    url: "/orders" // Directs user to their order history
+                }
+            });
+
+            // Send the notification using web-push
+            webpush.sendNotification(order.user.pushSubscription, payload)
+                .then(() => console.log(`✅ Push sent to user: ${order.user.email}`))
+                .catch(err => {
+                    console.error("❌ Push Error:", err);
+                    // Cleanup: If subscription is expired (410), remove it from user
+                    if (err.statusCode === 410 || err.statusCode === 404) {
+                        User.findByIdAndUpdate(order.user._id, { $unset: { pushSubscription: 1 } }).exec();
+                    }
+                });
         }
 
         res.status(200).json({ success: true, message: `Status updated to ${status}` });

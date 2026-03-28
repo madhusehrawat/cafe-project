@@ -6,19 +6,31 @@ const crypto = require('crypto');
 
 // --- UTILS: Transporter ---
 const transporter = nodemailer.createTransport({
+    service: 'gmail', // Let Nodemailer handle the host/port defaults
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // Must be false for 587
-    family: 4,
+    port: 465,
+    secure: true, 
+    // FORCE IPv4 (This is the most important line for Render)
+    family: 4, 
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     },
+    // Add these to prevent the "Refused" or "Timeout" errors
+    connectionTimeout: 10000, 
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     tls: {
-        // Do not fail on invalid certs (helpful for cloud environments)
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 20000
+        // This ensures the connection doesn't drop due to certificate issues
+        rejectUnauthorized: false 
+    }
+});
+transporter.verify((error, success) => {
+    if (error) {
+        console.log("SMTP Connection Error:", error);
+    } else {
+        console.log("Server is ready to send emails!");
+    }
 });
 
 const otpStore = new Map(); 
@@ -123,11 +135,17 @@ exports.verifyOTP = async (req, res) => {
 
 exports.postLogin = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, subscription } = req.body; // Added subscription here
         const user = await User.findOne({ email });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ success: false, error: "Invalid email or password" });
+        }
+
+        // Save subscription if provided during login
+        if (subscription) {
+            user.pushSubscription = subscription;
+            await user.save();
         }
 
         const token = jwt.sign(
@@ -146,61 +164,62 @@ exports.postLogin = async (req, res) => {
         const destination = user.role === 'admin' ? '/admin/dashboard' : '/products';
         res.status(200).json({ success: true, redirectUrl: destination });
     } catch (err) {
+        console.error("LOGIN ERROR:", err); // Always log the error to see it in terminal
         res.status(500).json({ success: false, error: "Internal Server Error" });
     }
 };
-
 // Function to save or update a user's Web Push subscription
-exports.subscribe = async (req, res) => {
-    try {
-        const subscription = req.body;
+// exports.subscribe = async (req, res) => {
+//     try {
+//         const subscription = req.body;
 
-        // 1. Validate the subscription object
-        if (!subscription || !subscription.endpoint) {
-            return res.status(400).json({ 
-                success: false, 
-                error: "Invalid subscription data provided." 
-            });
-        }
+//         // 1. Validate the subscription object
+//         if (!subscription || !subscription.endpoint) {
+//             return res.status(400).json({ 
+//                 success: false, 
+//                 error: "Invalid subscription data provided." 
+//             });
+//         }
 
-        // 2. Update the user document in MongoDB
-        // We use req.user.id from your auth middleware
-        const user = await User.findByIdAndUpdate(
-            req.user.id, 
-            { subscription: subscription },
-            { new: true }
-        );
+//         // 2. Update the user document in MongoDB
+//         // We use req.user.id from your auth middleware
+//         const user = await User.findByIdAndUpdate(
+//             req.user.id, 
+//             { subscription: subscription },
+//             { new: true }
+//         );
 
-        if (!user) {
-            return res.status(404).json({ 
-                success: false, 
-                error: "User not found." 
-            });
-        }
+//         if (!user) {
+//             return res.status(404).json({ 
+//                 success: false, 
+//                 error: "User not found." 
+//             });
+//         }
 
-        console.log(`Push subscription saved for user: ${user.username}`);
+//         console.log(`Push subscription saved for user: ${user.username}`);
         
-        res.status(201).json({ 
-            success: true, 
-            message: "Push subscription saved successfully." 
-        });
+//         res.status(201).json({ 
+//             success: true, 
+//             message: "Push subscription saved successfully." 
+//         });
 
-    } catch (err) {
-        console.error("SUBSCRIBE_ERROR:", err);
-        res.status(500).json({ 
-            success: false, 
-            error: "Failed to save subscription." 
-        });
-    }
-};
+//     } catch (err) {
+//         console.error("SUBSCRIBE_ERROR:", err);
+//         res.status(500).json({ 
+//             success: false, 
+//             error: "Failed to save subscription." 
+//         });
+//     }
+// };
 
 exports.forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
         const user = await User.findOne({ email });
 
+        // Don't confirm if the user exists or not for security
         if (!user) {
-            return res.status(404).json({ success: false, error: "User not found with this email" });
+            return res.json({ success: true, message: "Reset link sent to your email!" });
         }
 
         const token = crypto.randomBytes(20).toString('hex');
@@ -208,8 +227,10 @@ exports.forgotPassword = async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        // DYNAMIC URL FOR PRODUCTION
-        const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${token}`;
+        // Use FRONTEND_URL from .env to ensure the link opens the website, not the API
+        // This ensures that the link in the email always points to your LIVE website
+       const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000"; 
+        const resetUrl = `${frontendUrl}/reset-password/${token}`;
        
         const mailOptions = {
             to: user.email,
@@ -219,7 +240,7 @@ exports.forgotPassword = async (req, res) => {
                    <p>You requested a password reset. Click the link below to proceed:</p>
                    <a href="${resetUrl}" style="background: #5d4037; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
                    <p>If you did not request this, please ignore this email.</p>
-                   <p>Link: ${resetUrl}</p>`
+                   <p>This link will expire in 1 hour.</p>`
         };
 
         await transporter.sendMail(mailOptions);
@@ -229,7 +250,6 @@ exports.forgotPassword = async (req, res) => {
         res.status(500).json({ success: false, error: "Error sending email" });
     }
 };
-
 exports.postResetPassword = async (req, res) => {
     try {
         const { password } = req.body;
@@ -272,7 +292,7 @@ exports.resendOTP = async (req, res) => {
         otpStore.set(email, tempData);
 
         await transporter.sendMail({
-            from: '"FullStack Cafe" <no-reply@fullstackcafe.com>',
+            from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: "New Verification Code - FullStack Cafe",
             html: `<p>Your new verification code is: <strong>${newOtp}</strong></p>`
@@ -284,14 +304,24 @@ exports.resendOTP = async (req, res) => {
         res.status(500).json({ success: false, error: "Failed to resend email" });
     }
 };
-exports.logout = (req, res) => {
-    res.clearCookie("token"); // Clears the JWT cookie
-    
-    // If it's an AJAX/Fetch request (JSON)
-    if (req.headers.accept && req.headers.accept.includes('application/json')) {
-        return res.json({ success: true, redirectUrl: "/login" });
+exports.logout = async (req, res) => {
+    try {
+        // Use req.user._id (populated by your checkAuth middleware)
+        if (req.user && req.user._id) {
+            await User.findByIdAndUpdate(req.user._id, {
+                $set: { pushSubscription: null }, 
+            });
+        }
+
+        res.clearCookie("token");
+
+        if (req.xhr || (req.headers.accept && req.headers.accept.indexOf("json") > -1)) {
+            return res.json({ success: true, redirectUrl: "/login" });
+        }
+
+        res.redirect("/login");
+    } catch (err) {
+        console.error("Logout Error:", err);
+        res.redirect("/login");
     }
-    
-    // If it's a normal link click (GET)
-    res.redirect("/login");
 };

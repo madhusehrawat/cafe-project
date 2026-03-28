@@ -21,6 +21,6 @@ router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password/:token', authController.postResetPassword);
 
 // Push Notifications
-router.post('/subscribe', requireAuth, authController.subscribe);
+//router.post('/subscribe', requireAuth, authController.subscribe);
 
 module.exports = router;
