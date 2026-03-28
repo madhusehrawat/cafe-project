@@ -7,16 +7,18 @@ const crypto = require('crypto');
 // --- UTILS: Transporter ---
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // Use SSL/TLS
-    // THIS IS THE FIX: Forces Node to use IPv4
-    family: 4, 
+    port: 587,
+    secure: false, // Must be false for 587
+    family: 4,
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
+        pass: process.env.EMAIL_PASS
     },
-    // Optional: Increases timeout for slow free-tier spin-ups
-    connectionTimeout: 10000 
+    tls: {
+        // Do not fail on invalid certs (helpful for cloud environments)
+        rejectUnauthorized: false
+    },
+    connectionTimeout: 20000
 });
 
 const otpStore = new Map(); 
@@ -73,14 +75,13 @@ exports.postSignup = async (req, res) => {
             expires: Date.now() + 300000 
         });
 
-        const mailOptions = {
-            from: '"FullStack Cafe" <no-reply@fullstackcafe.com>',
-            to: email,
-            subject: "Verify Your Email - FullStack Cafe",
-            html: `<h3>Welcome to the Cafe!</h3>
-                   <p>Your verification code is: <strong>${otp}</strong></p>
-                   <p>This code expires in 5 minutes.</p>`
-        };
+      const mailOptions = {
+    // Make sure this email is EXACTLY the same as process.env.EMAIL_USER
+    from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`, 
+    to: email,
+    subject: "Verify Your Email - FullStack Cafe",
+    html: `<h3>Welcome!</h3><p>Code: <strong>${otp}</strong></p>`
+};
 
         await transporter.sendMail(mailOptions);
         res.status(200).json({ success: true, message: "OTP sent to email" });
@@ -207,17 +208,18 @@ exports.forgotPassword = async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        //const resetUrl = `http://${req.headers.host}/reset-password/${token}`;
-        const resetUrl = `http://10.191.74.218:3000/reset-password/${token}`;
+        // DYNAMIC URL FOR PRODUCTION
+        const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${token}`;
        
         const mailOptions = {
             to: user.email,
-            from: '"FullStack Cafe" <noreply@fullstackcafe.com>',
+            from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`, 
             subject: 'Password Reset Request',
             html: `<h3>Password Reset</h3>
                    <p>You requested a password reset. Click the link below to proceed:</p>
-                   <a href="${resetUrl}">${resetUrl}</a>
-                   <p>If you did not request this, please ignore this email.</p>`
+                   <a href="${resetUrl}" style="background: #5d4037; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
+                   <p>If you did not request this, please ignore this email.</p>
+                   <p>Link: ${resetUrl}</p>`
         };
 
         await transporter.sendMail(mailOptions);
