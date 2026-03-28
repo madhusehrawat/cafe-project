@@ -5,22 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | FullStack Cafe</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
     <style>
         :root {
             --primary: #e67e22;
             --primary-dark: #d35400;
             --coffee-brown: #5d4037;
         }
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #1e293b; }
         
-        /* Fixed Scroll Area for Tables */
         .table-container {
-            max-height: 60vh; /* Takes up 60% of the screen height */
+            max-height: 65vh;
             overflow-y: auto;
             border-radius: 0 0 12px 12px;
         }
 
-        /* Keep Table Headers Fixed while scrolling */
         thead th {
             position: sticky;
             top: 0;
@@ -29,9 +28,7 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
 
-        /* Coffee themed Scrollbar */
         .table-container::-webkit-scrollbar { width: 6px; }
-        .table-container::-webkit-scrollbar-track { background: #f1f5f9; }
         .table-container::-webkit-scrollbar-thumb { 
             background: var(--coffee-brown); 
             border-radius: 10px; 
@@ -43,88 +40,166 @@
         }
 
         .hidden-item { opacity: 0.5; background: #f1f5f9; }
+        
+        /* UI Feedback Glows */
+        .update-success { border-color: #22c55e !important; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2); transition: all 0.3s; }
+        .update-error { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); transition: all 0.3s; }
+        
+        #admin-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            transform: translateY(100px);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #admin-toast.show { transform: translateY(0); }
+
+        /* Modal Animation */
+        .modal-enter { transform: scale(0.9) translateY(20px); opacity: 0; }
+        .modal-active { transform: scale(1) translateY(0); opacity: 1; }
+
+        /* Polling Pulse */
+        @keyframes pulse-orange {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(230, 126, 34, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
+        }
+        .sync-indicator { animation: pulse-orange 2s infinite; }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
+<div id="admin-toast" class="bg-slate-800 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border-l-4 border-orange-500">
+    <div class="bg-orange-500/20 p-2 rounded-full">
+        <i class="fas fa-bolt text-orange-400"></i>
+    </div>
+    <div>
+        <p id="toast-msg" class="text-sm font-bold">Action completed</p>
+    </div>
+</div>
+
+<div id="confirm-modal" class="fixed inset-0 z-[10000] hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div id="modal-content" class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-300 modal-enter">
+        <div class="p-8 text-center">
+            <div class="w-20 h-20 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-question text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2" id="modal-title">Confirm?</h3>
+            <p class="text-slate-500 text-sm mb-8 leading-relaxed" id="modal-description">Are you sure you want to proceed with this change?</p>
+            
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all">
+                    Cancel
+                </button>
+                <button id="modal-confirm-btn" class="flex-1 px-4 py-3 rounded-2xl bg-slate-900 text-white font-bold hover:bg-slate-800 shadow-xl transition-all">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="max-w-7xl mx-auto">
-    <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800">FullStack Cafe Admin</h1>
-            <p class="text-sm text-slate-500">Business insights & menu management</p>
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+        <div class="flex items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight">Cafe Command</h1>
+                <div class="flex items-center gap-2">
+                    <div id="polling-dot" class="w-2 h-2 bg-orange-500 rounded-full sync-indicator"></div>
+                    <p class="text-sm text-slate-400 font-medium">Live monitoring enabled</p>
+                </div>
+            </div>
         </div>
         <div class="flex items-center gap-4 mt-4 md:mt-0">
-            <a href="/admin/products/add" class="bg-[#e67e22] hover:bg-[#d35400] text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all shadow-md active:scale-95">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Add Product
+            <button onclick="requestPushPermission()" class="bg-slate-50 hover:bg-orange-50 text-slate-400 hover:text-orange-500 p-3 rounded-2xl transition-all group" title="Enable Notifications">
+                <i class="fas fa-bell group-hover:animate-bounce"></i>
+            </button>
+            <a href="/admin/products/add" class="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95">
+                <i class="fas fa-plus"></i> <span>Add Item</span>
             </a>
-            <div class="hidden md:block h-10 w-px bg-slate-200 mx-2"></div>
+            <div class="h-10 w-px bg-slate-100 mx-2"></div>
             <div class="text-right">
-                <span class="block text-[10px] text-slate-400 uppercase font-black tracking-widest">Administrator</span>
-                <span class="font-bold text-slate-700"><%= user.username %></span> | 
-                <a href="/logout" class="text-red-500 hover:text-red-700 text-sm font-bold ml-1">Logout</a>
+                <span class="block text-[10px] text-orange-500 uppercase font-black tracking-widest leading-none mb-1">Administrator</span>
+                <span class="font-bold text-slate-800"><%= user.username %></span>
+                <a href="/logout" class="text-slate-400 hover:text-red-500 text-xs font-bold block transition-colors">Sign Out</a>
             </div>
         </div>
     </header>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-green-500">
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Revenue</p>
-            <h3 class="text-2xl font-bold text-slate-800 mt-1">₹<span id="stat-revenue"><%= stats.totalRevenue %></span></h3>
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-50">
+            <div class="flex justify-between items-start mb-4">
+                <div class="p-2 bg-green-50 rounded-xl text-green-600"><i class="fas fa-wallet"></i></div>
+                <span class="text-[10px] font-black text-green-500 bg-green-50 px-2 py-1 rounded-lg">+12%</span>
+            </div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Revenue</p>
+            <h3 class="text-2xl font-black text-slate-800 mt-1">₹<span id="stat-revenue"><%= stats.totalRevenue %></span></h3>
         </div>
-        <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-yellow-500">
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Orders</p>
-            <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-active"><%= stats.activeOrders %></h3>
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-50">
+            <div class="flex justify-between items-start mb-4">
+                <div class="p-2 bg-blue-50 rounded-xl text-blue-600"><i class="fas fa-shopping-bag"></i></div>
+            </div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Orders</p>
+            <h3 class="text-2xl font-black text-slate-800 mt-1" id="stat-active"><%= stats.activeOrders %></h3>
         </div>
-        <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-orange-500">
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Low Stock Items</p>
-            <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-low"><%= stats.lowStockCount %></h3>
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-50">
+            <div class="flex justify-between items-start mb-4">
+                <div class="p-2 bg-orange-50 rounded-xl text-orange-600"><i class="fas fa-exclamation-circle"></i></div>
+            </div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Low Stock</p>
+            <h3 class="text-2xl font-black text-slate-800 mt-1" id="stat-low"><%= stats.lowStockCount %></h3>
         </div>
-        <div class="bg-white p-6 rounded-xl shadow-sm border-t-4 border-blue-500">
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Orders</p>
-            <h3 class="text-2xl font-bold text-slate-800 mt-1" id="stat-total"><%= stats.orderCount %></h3>
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-50">
+            <div class="flex justify-between items-start mb-4">
+                <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i class="fas fa-comment-dots"></i></div>
+            </div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Feedback</p>
+            <h3 class="text-2xl font-black text-slate-800 mt-1" id="stat-feedback"><%= feedbacks.length %></h3>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div class="flex flex-col md:flex-row items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50 gap-4">
-            <div class="tabs flex gap-6">
-                <button id="orderTab" onclick="switchView('orders')" class="active pb-2 font-bold text-sm transition-all">Orders Management</button>
-                <button id="menuTab" onclick="switchView('menu')" class="pb-2 font-bold text-sm text-slate-400 transition-all">Menu Inventory</button>
+    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div class="flex flex-col md:flex-row items-center justify-between p-6 border-b border-slate-50 bg-slate-50/30 gap-6">
+            <div class="tabs flex gap-8 overflow-x-auto w-full md:w-auto">
+                <button id="orderTab" onclick="switchView('orders')" class="active pb-4 font-black text-sm whitespace-nowrap transition-all border-b-2 border-transparent">Orders</button>
+                <button id="menuTab" onclick="switchView('menu')" class="pb-4 font-black text-sm text-slate-300 whitespace-nowrap transition-all border-b-2 border-transparent">Menu Items</button>
+                <button id="feedbackTab" onclick="switchView('feedback')" class="pb-4 font-black text-sm text-slate-300 whitespace-nowrap transition-all border-b-2 border-transparent flex items-center gap-2">
+                    Feedback Hub 
+                    <span id="feedback-badge" class="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full <%= feedbacks.length > 0 ? '' : 'hidden' %>"><%= feedbacks.length %></span>
+                </button>
             </div>
-            <div class="relative w-full md:w-72">
-                <input type="text" id="tableSearch" onkeyup="filterTable()" placeholder="Search anything..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 outline-none text-sm transition-all">
-                <svg class="absolute left-3 top-2.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <div class="relative w-full md:w-80">
+                <input type="text" id="tableSearch" onkeyup="filterTable()" placeholder="Filter results..." class="w-full pl-12 pr-4 py-3 rounded-2xl bg-white border border-slate-200 outline-none text-sm font-medium transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-50/50">
+                <i class="fas fa-search absolute left-4 top-4 text-slate-300"></i>
             </div>
         </div>
 
         <div id="orders-section" class="table-container">
             <table class="w-full text-left border-collapse">
                 <thead>
-                    <tr>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">ID</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Customer</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Amount</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Status</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase text-right">Date</th>
+                    <tr class="bg-slate-50/50">
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">ID</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Date</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
+                <tbody id="orders-tbody" class="divide-y divide-slate-50">
                     <% orders.forEach(order => { %>
-                        <tr class="hover:bg-slate-50/80 transition-colors">
-                            <td class="p-4 font-mono text-xs text-orange-600 font-bold">#<%= order._id.toString().slice(-6).toUpperCase() %></td>
-                            <td class="p-4 text-sm font-semibold text-slate-700"><%= order.user ? order.user.username : 'Guest User' %></td>
-                            <td class="p-4 text-sm font-bold text-slate-900">₹<%= order.totalAmount %></td>
-                            <td class="p-4">
-                                <select onchange="updateOrderStatus('<%= order._id %>', this.value)" class="text-xs font-bold p-1.5 border rounded-md bg-white focus:ring-2 focus:ring-orange-100 outline-none cursor-pointer">
-                                    <option value="Pending" <%= order.status === 'Pending' ? 'selected' : '' %>>Pending</option>
-                                    <option value="Preparing" <%= order.status === 'Preparing' ? 'selected' : '' %>>Preparing</option>
-                                    <option value="Out for Delivery" <%= order.status === 'Out for Delivery' ? 'selected' : '' %>>Out for Delivery</option>
-                                    <option value="Delivered" <%= order.status === 'Delivered' ? 'selected' : '' %>>Delivered</option>
-                                    <option value="Cancelled" <%= order.status === 'Cancelled' ? 'selected' : '' %>>Cancelled</option>
+                        <tr class="hover:bg-slate-50/50 transition-colors">
+                            <td class="p-5 font-mono text-xs text-orange-600 font-bold">#<%= order._id.toString().slice(-6).toUpperCase() %></td>
+                            <td class="p-5 text-sm font-bold text-slate-700"><%= order.user ? order.user.username : 'Guest' %></td>
+                            <td class="p-5 text-sm font-black text-slate-900">₹<%= order.totalAmount %></td>
+                            <td class="p-5">
+                                <select onchange="updateOrderStatus('<%= order._id %>', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
+                                    <% ['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].forEach(s => { %>
+                                        <option value="<%= s %>" <%= order.status === s ? 'selected' : '' %>><%= s %></option>
+                                    <% }) %>
                                 </select>
                             </td>
-                            <td class="p-4 text-xs text-slate-400 text-right font-medium"><%= new Date(order.createdAt).toLocaleDateString('en-IN') %></td>
+                            <td class="p-5 text-xs font-bold text-slate-400 text-right"><%= new Date(order.createdAt).toLocaleDateString('en-IN') %></td>
                         </tr>
                     <% }) %>
                 </tbody>
@@ -134,32 +209,55 @@
         <div id="menu-section" class="table-container hidden">
             <table class="w-full text-left border-collapse">
                 <thead>
-                    <tr>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Menu Item</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Price</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Current Stock</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase">Availability</th>
-                        <th class="p-4 text-xs font-bold text-slate-500 uppercase text-right">Actions</th>
+                    <tr class="bg-slate-50/50">
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Item Name</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Price</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock</th>
+                        <th class="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
+                <tbody id="menu-tbody" class="divide-y divide-slate-50">
                     <% products.forEach(product => { %>
-                        <tr id="row-<%= product._id %>" class="<%= product.isActive ? '' : 'hidden-item' %> hover:bg-slate-50 transition-all">
-                            <td class="p-4 font-bold text-slate-700"><%= product.name %></td>
-                            <td class="p-4 text-sm font-bold text-slate-500">₹<%= product.price %></td>
-                            <td class="p-4">
-                                <input type="number" id="stock-input-<%= product._id %>" value="<%= product.countInStock %>" 
-                                       onchange="updateStock('<%= product._id %>')"
-                                       class="w-20 p-1.5 border rounded text-center font-bold text-sm focus:border-orange-500 outline-none transition-all">
+                        <tr id="row-<%= product._id %>" class="<%= product.isActive ? '' : 'hidden-item' %> transition-all">
+                            <td class="p-5">
+                                <input type="text" value="<%= product.name %>" 
+                                       onchange="updateProductField('<%= product._id %>', 'name', this.value)"
+                                       class="block w-full font-bold text-slate-700 bg-transparent border-none focus:ring-0 p-0 outline-none">
+                                <span class="text-[9px] uppercase text-orange-500 font-black"><%= product.category %></span>
                             </td>
-                            <td class="p-4">
-                                <span id="badge-<%= product._id %>" class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter text-white <%= product.countInStock > 5 ? 'bg-green-500' : (product.countInStock > 0 ? 'bg-yellow-500' : 'bg-red-500') %>">
-                                    <%= !product.isActive ? 'HIDDEN' : (product.countInStock > 5 ? 'AVAILABLE' : (product.countInStock > 0 ? 'LOW STOCK' : 'OUT OF STOCK')) %>
-                                </span>
+                            <td class="p-5">
+                                <div class="flex items-center gap-1 font-black text-slate-900">
+                                    <span>₹</span>
+                                    <input type="number" value="<%= product.price %>" 
+                                           onchange="updateProductField('<%= product._id %>', 'price', this.value)"
+                                           class="w-20 bg-transparent border-none focus:ring-0 p-0 outline-none">
+                                </div>
                             </td>
-                            <td class="p-4 text-right">
+                            <td class="p-5">
+    <div class="flex items-center gap-4">
+        <input type="number" id="stock-input-<%= product._id %>" value="<%= product.countInStock %>" 
+               onchange="updateStock('<%= product._id %>')"
+               class="w-16 p-2 rounded-xl border border-slate-100 text-center font-black text-sm outline-none">
+        
+        <% 
+            let badgeClass = 'bg-green-400';
+            let badgeText = 'OK';
+            if (product.countInStock <= 0) {
+                badgeClass = 'bg-slate-400';
+                badgeText = 'OUT';
+            } else if (product.countInStock <= 5) {
+                badgeClass = 'bg-orange-500';
+                badgeText = 'LOW';
+            }
+        %>
+        <span id="badge-<%= product._id %>" class="text-[8px] font-black px-2 py-1 rounded-lg text-white <%= badgeClass %>">
+            <%= badgeText %>
+        </span>
+    </div>
+</td>
+                            <td class="p-5 text-right">
                                 <button id="toggle-<%= product._id %>" onclick="toggleProductStatus('<%= product._id %>')" 
-                                        class="text-[10px] font-bold px-4 py-1.5 rounded bg-slate-100 border hover:bg-slate-200 transition-all uppercase">
+                                        class="text-[10px] font-black px-4 py-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all uppercase">
                                     <%= product.isActive ? 'Hide' : 'Show' %>
                                 </button>
                             </td>
@@ -168,109 +266,163 @@
                 </tbody>
             </table>
         </div>
+
+        <div id="feedback-section" class="table-container hidden bg-slate-50/20">
+            <div id="feedback-grid" class="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <% feedbacks.forEach(item => { %>
+                    <div class="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm relative group">
+                        <div class="flex justify-between items-start mb-4">
+                            <span class="text-[8px] font-black px-3 py-1 bg-slate-900 text-white rounded-full uppercase"><%= item.product || 'Feedback' %></span>
+                            <span class="text-[10px] font-bold text-slate-300"><%= new Date(item.createdAt).toLocaleDateString() %></span>
+                        </div>
+                        <h4 class="font-black text-slate-800"><%= item.name %></h4>
+                        <p class="text-xs text-slate-400 mb-4"><%= item.email %></p>
+                        <div class="bg-slate-50 p-4 rounded-2xl text-sm font-medium text-slate-600 italic">
+                            "<%= item.message %>"
+                        </div>
+                        <button onclick="deleteFeedback('<%= item._id %>')" class="absolute top-4 right-4 text-slate-200 hover:text-red-500 transition-colors">
+                            <i class="fas fa-trash-alt text-xs"></i>
+                        </button>
+                    </div>
+                <% }) %>
+            </div>
+        </div>
     </div>
 </div>
+
 <input type="hidden" id="vapid-public-key" value="<%= publicVapidKey %>">
 
 <script>
-    // Tab Switching
+    const VAPID_KEY = document.getElementById('vapid-public-key').value;
+
+    // --- TOAST LOGIC ---
+    function showToast(msg) {
+        const toast = document.getElementById('admin-toast');
+        document.getElementById('toast-msg').textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // --- MODAL LOGIC ---
+    function openConfirmModal(title, description, onConfirm) {
+        const modal = document.getElementById('confirm-modal');
+        const content = document.getElementById('modal-content');
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-description').textContent = description;
+        modal.classList.remove('hidden');
+        setTimeout(() => content.classList.add('modal-active'), 10);
+        document.getElementById('modal-confirm-btn').onclick = () => {
+            onConfirm();
+            closeConfirmModal();
+        };
+    }
+
+    function closeConfirmModal() {
+        const modal = document.getElementById('confirm-modal');
+        const content = document.getElementById('modal-content');
+        content.classList.remove('modal-active');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    // --- VIEW SWITCHING ---
     function switchView(view) {
-        const orderSec = document.getElementById('orders-section');
-        const menuSec = document.getElementById('menu-section');
-        const orderTab = document.getElementById('orderTab');
-        const menuTab = document.getElementById('menuTab');
-
-        if(view === 'orders') {
-            orderSec.classList.remove('hidden');
-            menuSec.classList.add('hidden');
-            orderTab.classList.add('active', 'text-slate-800');
-            menuTab.classList.remove('active', 'text-slate-800');
-            menuTab.classList.add('text-slate-400');
-        } else {
-            menuSec.classList.remove('hidden');
-            orderSec.classList.add('hidden');
-            menuTab.classList.add('active', 'text-slate-800');
-            orderTab.classList.remove('active', 'text-slate-800');
-            orderTab.classList.add('text-slate-400');
-        }
-    }
-const VAPID_PUBLIC_KEY = document.getElementById('vapid-public-key').value;
-
-    // Helper function to convert the VAPID key for the browser
-    function urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
+        const ids = ['orders', 'menu', 'feedback'];
+        ids.forEach(id => {
+            const section = document.getElementById(`${id}-section`);
+            const tab = document.getElementById(`${id === 'feedback' ? 'feedback' : (id === 'orders' ? 'order' : 'menu')}Tab`);
+            if(id === view) {
+                section.classList.remove('hidden');
+                tab.classList.add('active', 'text-slate-800', 'border-orange-500');
+                tab.classList.remove('text-slate-300');
+            } else {
+                section.classList.add('hidden');
+                tab.classList.remove('active', 'text-slate-800', 'border-orange-500');
+                tab.classList.add('text-slate-300');
+            }
+        });
     }
 
-    async function subscribeUser() {
-        try {
-            // 1. Register Service Worker
-            const register = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
-            });
-
-            // 2. Wait for registration to be ready
-            const subscription = await register.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-            });
-
-            // 3. Send subscription to your backend
-            await fetch('/subscribe', {
-                method: 'POST',
-                body: JSON.stringify(subscription),
-                headers: { 'Content-Type': 'application/json' }
-            });
+    // --- POLLING ENGINE ---
+    // Start polling every 30 seconds
+    function startPolling() {
+        setInterval(async () => {
+            const dot = document.getElementById('polling-dot');
+            dot.classList.add('sync-indicator'); // Visual feedback
             
-            console.log("Push Registration Successful");
-        } catch (err) {
-            console.error("Failed to subscribe user:", err);
-        }
+            await Promise.all([
+                refreshDashboardStats(),
+                refreshTables()
+            ]);
+            
+            console.log("Dashboard Auto-Synced: " + new Date().toLocaleTimeString());
+        }, 30000); 
     }
 
-    // Check for browser support and trigger
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        // We trigger this on load, but in production, 
-        // you might want to trigger it via a "Enable Notifications" button
-        window.addEventListener('load', () => {
-            subscribeUser();
-        });
-    }
-
-    // Dynamic Search
-    function filterTable() {
-        const query = document.getElementById('tableSearch').value.toLowerCase();
-        document.querySelectorAll('tbody tr').forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
-        });
-    }
-
-    // AJAX: Update Stock Level
-    async function updateStock(productId) {
-        const input = document.getElementById(`stock-input-${productId}`);
-        const newStock = input.value;
+    async function refreshDashboardStats() {
         try {
-            const res = await fetch('/admin/product/update-stock', {
+            const response = await fetch('/admin/dashboard-data');
+            const data = await response.json();
+            if (data.success && data.stats) {
+                document.getElementById('stat-revenue').textContent = data.stats.totalRevenue;
+                document.getElementById('stat-active').textContent = data.stats.activeOrders;
+                document.getElementById('stat-low').textContent = data.stats.lowStockCount;
+                
+                // Update feedback badge
+                const fBadge = document.getElementById('feedback-badge');
+                document.getElementById('stat-feedback').textContent = data.feedbacks.length;
+                fBadge.textContent = data.feedbacks.length;
+                data.feedbacks.length > 0 ? fBadge.classList.remove('hidden') : fBadge.classList.add('hidden');
+            }
+        } catch (err) { console.warn("Stats sync failed"); }
+    }
+
+    // Function to re-render table contents without full page reload
+    async function refreshTables() {
+        try {
+            const res = await fetch('/admin/dashboard-data');
+            const data = await res.json();
+            if (!data.success) return;
+
+            // 1. Refresh Orders
+            const ordersTbody = document.getElementById('orders-tbody');
+            ordersTbody.innerHTML = data.orders.map(order => `
+                <tr class="hover:bg-slate-50/50 transition-colors">
+                    <td class="p-5 font-mono text-xs text-orange-600 font-bold">#${order._id.toString().slice(-6).toUpperCase()}</td>
+                    <td class="p-5 text-sm font-bold text-slate-700">${order.user ? order.user.username : 'Guest'}</td>
+                    <td class="p-5 text-sm font-black text-slate-900">₹${order.totalAmount}</td>
+                    <td class="p-5">
+                        <select onchange="updateOrderStatus('${order._id}', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
+                            ${['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => `
+                                <option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>
+                            `).join('')}
+                        </select>
+                    </td>
+                    <td class="p-5 text-xs font-bold text-slate-400 text-right">${new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
+                </tr>
+            `).join('');
+
+            // Note: Menu items are usually less volatile, but can be updated similarly if needed.
+        } catch (e) { console.error("Table refresh failed", e); }
+    }
+
+    // --- ACTIONS ---
+    async function updateProductField(productId, field, value) {
+        const input = event.target;
+        try {
+            const res = await fetch('/admin/product/update-field', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ productId, newStock })
+                body: JSON.stringify({ productId, field, value })
             });
-            const data = await res.json();
-            if (data.success) {
-                input.classList.add('bg-green-50', 'border-green-400');
-                setTimeout(() => input.classList.remove('bg-green-50', 'border-green-400'), 1000);
-                refreshDashboardData();
+            if ((await res.json()).success) {
+                input.classList.add('update-success');
+                setTimeout(() => input.classList.remove('update-success'), 1000);
+                showToast(`Updated ${field}`);
+                refreshDashboardStats();
             }
-        } catch (e) { console.error("Stock update failed"); }
+        } catch (e) { showToast("Update failed"); }
     }
 
-    // AJAX: Toggle Product Visibility
     async function toggleProductStatus(id) {
         try {
             const res = await fetch(`/admin/product/toggle/${id}`, { method: 'POST' });
@@ -278,23 +430,13 @@ const VAPID_PUBLIC_KEY = document.getElementById('vapid-public-key').value;
             if (data.success) {
                 const row = document.getElementById(`row-${id}`);
                 const btn = document.getElementById(`toggle-${id}`);
-                const badge = document.getElementById(`badge-${id}`);
-                
-                if (data.isActive) {
-                    row.classList.remove('hidden-item');
-                    btn.innerText = 'Hide';
-                } else {
-                    row.classList.add('hidden-item');
-                    btn.innerText = 'Show';
-                    badge.innerText = 'HIDDEN';
-                    badge.className = "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter text-white bg-slate-400";
-                }
-                refreshDashboardData();
+                data.isActive ? row.classList.remove('hidden-item') : row.classList.add('hidden-item');
+                btn.innerText = data.isActive ? 'Hide' : 'Show';
+                showToast("Visibility changed");
             }
-        } catch (e) { alert("Toggle Error"); }
+        } catch (e) { showToast("Operation failed"); }
     }
 
-    // AJAX: Update Order Status
     async function updateOrderStatus(orderId, status) {
         try {
             const res = await fetch('/admin/order/status', {
@@ -302,28 +444,98 @@ const VAPID_PUBLIC_KEY = document.getElementById('vapid-public-key').value;
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ orderId, status })
             });
-            const data = await res.json();
-            if (data.success) refreshDashboardData();
-        } catch (e) { console.error("Order status update failed"); }
-    }
-
-    // Global Data Sync
-    async function refreshDashboardData() {
-        try {
-            const response = await fetch('/admin/dashboard-data');
-            const data = await response.json();
-            if (data.success && data.stats) {
-                document.getElementById('stat-revenue').textContent = data.stats.totalRevenue.replace('₹', '');
-                document.getElementById('stat-active').textContent = data.stats.activeOrders;
-                document.getElementById('stat-low').textContent = data.stats.lowStockCount;
-                document.getElementById('stat-total').textContent = data.stats.orderCount;
+            if ((await res.json()).success) {
+                showToast(`Status: ${status}`);
+                refreshDashboardStats();
             }
-        } catch (err) { console.warn("Sync failed - will retry"); }
+        } catch (e) { showToast("Sync error"); }
     }
 
-    // Auto-refresh stats every 30 seconds
-    setInterval(refreshDashboardData, 30000);
-</script>
+    // Initialize Polling on load
+    window.onload = startPolling;
 
+    // --- SEARCH ---
+    function filterTable() {
+        const query = document.getElementById('tableSearch').value.toLowerCase();
+        document.querySelectorAll('tbody tr, #feedback-section .group').forEach(el => {
+            el.style.display = el.innerText.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
+
+    async function updateStock(productId) {
+    const input = document.getElementById(`stock-input-${productId}`);
+    const badge = document.getElementById(`badge-${productId}`);
+    const newValue = parseInt(input.value);
+
+    // 1. Immediate UI Feedback (Visual State)
+    updateBadgeUI(badge, newValue);
+
+    try {
+        const res = await fetch('/admin/product/update-field', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                productId, 
+                field: 'countInStock', 
+                value: newValue 
+            })
+        });
+
+        if ((await res.json()).success) {
+            input.classList.add('update-success');
+            setTimeout(() => input.classList.remove('update-success'), 1000);
+            showToast(`Stock updated to ${newValue}`);
+            refreshDashboardStats(); // Sync the "Low Stock" counter at the top
+        }
+    } catch (e) {
+        showToast("Stock sync failed");
+        input.classList.add('update-error');
+    }
+}
+
+// Helper to handle the CSS classes and Text for the badge
+function updateBadgeUI(badge, stock) {
+    // Reset classes
+    badge.classList.remove('bg-green-400', 'bg-red-400', 'bg-slate-400', 'bg-orange-500');
+    
+    if (stock <= 0) {
+        badge.textContent = 'OUT';
+        badge.classList.add('bg-slate-400');
+    } else if (stock <= 5) {
+        badge.textContent = 'LOW';
+        badge.classList.add('bg-orange-500');
+    } else {
+        badge.textContent = 'OK';
+        badge.classList.add('bg-green-400');
+    }
+}
+
+    // --- WEB PUSH & UTIL ---
+    async function requestPushPermission() {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const register = await navigator.serviceWorker.register('/sw.js');
+            const subscription = await register.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_KEY)
+            });
+            await fetch('/subscribe', {
+                method: 'POST',
+                body: JSON.stringify(subscription),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            showToast("Notifications Live!");
+        } catch (e) { showToast("Notification setup failed"); }
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+        return outputArray;
+    }
+</script>
 </body>
 </html>
