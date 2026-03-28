@@ -202,8 +202,9 @@ exports.forgotPassword = async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        const resetUrl = `http://${req.headers.host}/reset-password/${token}`;
-
+        //const resetUrl = `http://${req.headers.host}/reset-password/${token}`;
+        const resetUrl = `http://10.191.74.218:3000/reset-password/${token}`;
+       
         const mailOptions = {
             to: user.email,
             from: '"FullStack Cafe" <noreply@fullstackcafe.com>',
@@ -277,9 +278,13 @@ exports.resendOTP = async (req, res) => {
     }
 };
 exports.logout = (req, res) => {
-    res.clearCookie("token");
+    res.clearCookie("token"); // Clears the JWT cookie
+    
+    // If it's an AJAX/Fetch request (JSON)
     if (req.headers.accept && req.headers.accept.includes('application/json')) {
         return res.json({ success: true, redirectUrl: "/login" });
     }
+    
+    // If it's a normal link click (GET)
     res.redirect("/login");
 };

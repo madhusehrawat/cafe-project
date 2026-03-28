@@ -1,31 +1,26 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const authController = require("../controllers/authController");
-const { requireAuth } = require("../middleware/authMiddleware");
+const authController = require('../controllers/authController');
+const { requireAuth } = require('../middleware/authMiddleware');
 
-
-// Registration
-router.get("/signup", authController.getSignupPage);
-router.post("/signup", authController.postSignup);
-
-// Add these to your existing routes
-router.get("/verify-otp", (req, res) => res.render("verify-otp"));
-router.post("/verify-otp", authController.verifyOTP);
-router.post("/resend-otp", authController.resendOTP);
+// Pages
+router.get('/signup', authController.getSignupPage);
+router.get('/login', authController.getLoginPage);
 router.get('/forgot-password', authController.getForgotPasswordPage);
-
-router.post('/forgot-password', authController.forgotPassword);
-
 router.get('/reset-password/:token', authController.getResetPasswordPage);
+router.get('/verify-otp', (req, res) => res.render('verify-otp')); // Simple render
+router.get('/logout', authController.logout);
 
+// Logic
+router.post('/signup', authController.postSignup);
+router.post('/verify-otp', authController.verifyOTP);
+router.post('/resend-otp', authController.resendOTP);
+router.post('/login', authController.postLogin);
+router.post('/logout', authController.logout);
+router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password/:token', authController.postResetPassword);
-// Login
-router.get("/login", authController.getLoginPage);
-router.post("/login", authController.postLogin);
 
+// Push Notifications
 router.post('/subscribe', requireAuth, authController.subscribe);
-
-// Logout (Line 12 - Make sure logout is defined in controller)
-router.get("/logout", authController.logout);
 
 module.exports = router;

@@ -1,17 +1,17 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs"); // Highly recommended
+const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
     username: { 
         type: String, 
         required: [true, "Username is required"],
-        trim: true // Removes accidental whitespace
+        trim: true 
     },
     email: { 
         type: String, 
         required: [true, "Email is required"], 
         unique: true,
-        lowercase: true, // Ensures "User@Email.com" matches "user@email.com"
+        lowercase: true, 
         trim: true
     },
     password: { 
@@ -24,27 +24,38 @@ const userSchema = new mongoose.Schema({
         enum: ["user", "admin"], 
         default: "user" 
     },
-    // Changed to null default for easier "if" checks in Web Push
     subscription: { 
         type: Object,
         default: null 
     },
-    
-    // --- FORGOT PASSWORD FIELDS ---
     resetPasswordToken: String,
     resetPasswordExpires: Date
 }, { timestamps: true });
 
 // --- PASSWORD HASHING HOOK ---
-// This hashes the password automatically before saving to MongoDB
-userSchema.pre("save", async function(next) {
-    if (!this.isModified("password")) return next();
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
+userSchema.pre('save', async function() {
+    // 'this' refers to the user document
+    // If the password hasn't changed, just stop here
+    if (!this.isModified('password')) {
+        return; 
+    }
+
+    // Safety check: if it looks like it's already hashed, don't hash it again
+    if (this.password.startsWith('$2a$') || this.password.startsWith('$2b$')) {
+        return;
+    }
+
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        // In an async function, simply returning is the same as calling next()
+    } catch (err) {
+        // If there's an error, we throw it so Mongoose catches it
+        throw err;
+    }
 });
 
-// Helper method to compare passwords during login
+// Helper method to compare passwords
 userSchema.methods.comparePassword = async function(candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
