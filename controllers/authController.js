@@ -5,13 +5,18 @@ const nodemailer = require("nodemailer");
 const crypto = require('crypto');
 
 // --- UTILS: Transporter ---
-// Defined once at the top to be used by all functions
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Use SSL/TLS
+    // THIS IS THE FIX: Forces Node to use IPv4
+    family: 4, 
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS 
-    }
+    },
+    // Optional: Increases timeout for slow free-tier spin-ups
+    connectionTimeout: 10000 
 });
 
 const otpStore = new Map(); 
