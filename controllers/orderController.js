@@ -5,83 +5,7 @@ const Product = require("../models/Product");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 
-/**
- * 1. Admin: Get Dashboard (The page itself)
- * FIX: Wrapped stats into an object to match EJS expectations
- */
-exports.getAdminDashboard = async (req, res) => {
-    try {
-        const orders = await Order.find()
-            .populate('user')
-            .sort({ createdAt: -1 })
-            .lean() || [];
 
-        const products = await Product.find().sort({ name: 1 }).lean() || [];
-
-        // Calculate Revenue
-        const totalRevenue = orders
-            .filter(o => o && o.status === 'Delivered')
-            .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-
-        // Calculate Active Orders
-        const activeOrdersCount = orders.filter(o => 
-            o && !['Delivered', 'Cancelled'].includes(o.status)
-        ).length;
-
-        // Calculate Low Stock
-        const lowStockCount = products.filter(p => p && (Number(p.countInStock) || 0) <= 5).length;
-
-        // Group into a stats object for the EJS template
-        const stats = {
-            totalRevenue: totalRevenue.toFixed(2),
-            activeOrders: activeOrdersCount,
-            lowStockCount: lowStockCount,
-            orderCount: orders.length
-        };
-
-        res.render("admin/dashboard", { 
-            orders, 
-            products,
-            stats, // This must be passed as an object
-            user: req.user || {} 
-        });
-    } catch (err) {
-        console.error("Dashboard Load Error:", err);
-        res.status(500).send(`<h1>Dashboard Error</h1><pre>${err.stack}</pre>`);
-    }
-};
-
-/**
- * 2. Admin: Get Dashboard Data (For AJAX Sync)
- */
-exports.getDashboardData = async (req, res) => {
-    try {
-        const orders = await Order.find().lean() || [];
-        const products = await Product.find().lean() || [];
-
-        const totalRevenue = orders
-            .filter(o => o && o.status === 'Delivered')
-            .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-
-        res.json({
-            success: true,
-            lastUpdated: new Date().toLocaleTimeString(),
-            stats: {
-                totalRevenue: totalRevenue.toFixed(2),
-                activeOrders: orders.filter(o => o && !['Delivered', 'Cancelled'].includes(o.status)).length,
-                lowStockCount: products.filter(p => p && (Number(p.countInStock) || 0) <= 5).length,
-                orderCount: orders.length
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Sync failed" });
-    }
-};
-
-
-/**
- * 3. User: Get My Orders
- */
 exports.getMyOrders = async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user._id })
@@ -97,7 +21,7 @@ exports.getMyOrders = async (req, res) => {
 };
 
 /**
- * 4. User/Admin: Get Order Status (SECURED)
+ *  User/Admin: Get Order Status (SECURED)
  */
 exports.getOrderStatus = async (req, res) => {
     try {
@@ -169,82 +93,82 @@ exports.handleReorder = async (req, res) => {
 /**
  * 7. Admin: Update Order Status & Stock + PUSH NOTIFICATIONS
  */
-exports.updateOrderStatus = async (req, res) => {
-    try {
-        const { orderId, status } = req.body;
+// exports.updateOrderStatus = async (req, res) => {
+//     try {
+//         const { orderId, status } = req.body;
         
-        // Populate 'user' to get the pushSubscription object
-        const order = await Order.findById(orderId).populate('user');
-        if (!order) return res.status(404).json({ success: false, message: "Order not found." });
+//         // Populate 'user' to get the pushSubscription object
+//         const order = await Order.findById(orderId).populate('user');
+//         if (!order) return res.status(404).json({ success: false, message: "Order not found." });
 
-        const oldStatus = (order.status || "").toLowerCase();
-        const newStatus = (status || "").toLowerCase();
+//         const oldStatus = (order.status || "").toLowerCase();
+//         const newStatus = (status || "").toLowerCase();
 
-        // --- 1. STOCK LOGIC ---
-        if (oldStatus === 'pending' && ['preparing', 'out for delivery', 'delivered'].includes(newStatus)) {
-            for (const item of order.items) {
-                await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: -item.quantity } });
-            }
-        }
+//         // --- 1. STOCK LOGIC ---
+//         if (oldStatus === 'pending' && ['preparing', 'out for delivery', 'delivered'].includes(newStatus)) {
+//             for (const item of order.items) {
+//                 await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: -item.quantity } });
+//             }
+//         }
 
-        if (['preparing', 'out for delivery', 'delivered'].includes(oldStatus) && (newStatus === 'cancelled' || newStatus === 'pending')) {
-            for (const item of order.items) {
-                await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: item.quantity } });
-            }
-        }
+//         if (['preparing', 'out for delivery', 'delivered'].includes(oldStatus) && (newStatus === 'cancelled' || newStatus === 'pending')) {
+//             for (const item of order.items) {
+//                 await Product.findByIdAndUpdate(item.productId, { $inc: { countInStock: item.quantity } });
+//             }
+//         }
 
-        // --- 2. UPDATE DATABASE ---
-        order.status = status; 
-        await order.save();
+//         // --- 2. UPDATE DATABASE ---
+//         order.status = status; 
+//         await order.save();
 
-        // --- 3. PUSH NOTIFICATION LOGIC ---
-        if (oldStatus !== newStatus && order.user && order.user.pushSubscription) {
-            let message = "";
-            let title = "Order Update - FullStack Café";
+//         // --- 3. PUSH NOTIFICATION LOGIC ---
+//         if (oldStatus !== newStatus && order.user && order.user.pushSubscription) {
+//             let message = "";
+//             let title = "Order Update - FullStack Café";
             
-            // Customize message based on status
-            switch(newStatus) {
-                case 'preparing':
-                    message = "Your delicious order is now being prepared! ☕";
-                    break;
-                case 'out for delivery':
-                    message = "Get ready! Your order is on its way to you. 🛵";
-                    break;
-                case 'delivered':
-                    message = "Enjoy your meal! Your order has been delivered. ✅";
-                    break;
-                case 'cancelled':
-                    message = "Your order has been cancelled. Please contact us for details. ❌";
-                    break;
-                default:
-                    message = `Your order status has changed to: ${status}`;
-            }
+//             // Customize message based on status
+//             switch(newStatus) {
+//                 case 'preparing':
+//                     message = "Your delicious order is now being prepared! ☕";
+//                     break;
+//                 case 'out for delivery':
+//                     message = "Get ready! Your order is on its way to you. 🛵";
+//                     break;
+//                 case 'delivered':
+//                     message = "Enjoy your meal! Your order has been delivered. ✅";
+//                     break;
+//                 case 'cancelled':
+//                     message = "Your order has been cancelled. Please contact us for details. ❌";
+//                     break;
+//                 default:
+//                     message = `Your order status has changed to: ${status}`;
+//             }
 
-            // Construct the payload for sw.js
-            const payload = JSON.stringify({
-                title: title,
-                body: message,
-                icon: "/icons/favicon.png",
-                data: {
-                    url: "/orders" // Directs user to their order history
-                }
-            });
+//             // Construct the payload for sw.js
+//             const payload = JSON.stringify({
+//                 title: title,
+//                 body: message,
+//                 icon: "/icons/favicon.png",
+//                 data: {
+//                     url: "/orders" // Directs user to their order history
+//                 }
+//             });
 
-            // Send the notification using web-push
-            webpush.sendNotification(order.user.pushSubscription, payload)
-                .then(() => console.log(`✅ Push sent to user: ${order.user.email}`))
-                .catch(err => {
-                    console.error("❌ Push Error:", err);
-                    // Cleanup: If subscription is expired (410), remove it from user
-                    if (err.statusCode === 410 || err.statusCode === 404) {
-                        User.findByIdAndUpdate(order.user._id, { $unset: { pushSubscription: 1 } }).exec();
-                    }
-                });
-        }
+//             // Send the notification using web-push
+//             webpush.sendNotification(order.user.pushSubscription, payload)
+//                 .then(() => console.log(`✅ Push sent to user: ${order.user.email}`))
+//                 .catch(err => {
+//                     console.error("❌ Push Error:", err);
+//                     // Cleanup: If subscription is expired (410), remove it from user
+//                     if (err.statusCode === 410 || err.statusCode === 404) {
+//                         User.findByIdAndUpdate(order.user._id, { $unset: { pushSubscription: 1 } }).exec();
+//                     }
+//                 });
+//         }
 
-        res.status(200).json({ success: true, message: `Status updated to ${status}` });
-    } catch (err) {
-        console.error("Order Update Error:", err);
-        res.status(500).json({ success: false, message: "Failed to update order status." });
-    }
-};
+//         res.status(200).json({ success: true, message: `Status updated to ${status}` });
+//     } catch (err) {
+//         console.error("Order Update Error:", err);
+//         res.status(500).json({ success: false, message: "Failed to update order status." });
+//     }
+// };

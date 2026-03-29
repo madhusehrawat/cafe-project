@@ -155,7 +155,9 @@
                 <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i class="fas fa-comment-dots"></i></div>
             </div>
             <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Feedback</p>
-            <span id="feedback-count"><%= feedbacks.length %></span>
+       <h3 id="feedback-count" class="text-2xl font-black text-slate-800 mt-1">
+    <%= feedbacks.length %>
+</h3>
         </div>
     </div>
 
@@ -166,7 +168,9 @@
                 <button id="menuTab" onclick="switchView('menu')" class="pb-4 font-black text-sm text-slate-300 whitespace-nowrap transition-all border-b-2 border-transparent">Menu Items</button>
                 <button id="feedbackTab" onclick="switchView('feedback')" class="pb-4 font-black text-sm text-slate-300 whitespace-nowrap transition-all border-b-2 border-transparent flex items-center gap-2">
                     Feedback Hub 
-                    <span id="feedback-badge" class="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full <%= feedbacks.length > 0 ? '' : 'hidden' %>"><%= feedbacks.length %></span>
+                    <span id="feedback-badge" class="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full <%= feedbacks.length > 0 ? '' : 'hidden' %>">
+        <%= feedbacks.length %>
+    </span>
                 </button>
             </div>
             <div class="relative w-full md:w-80">
@@ -385,22 +389,21 @@
 
             // 1. Refresh Orders
             const ordersTbody = document.getElementById('orders-tbody');
-            ordersTbody.innerHTML = data.orders.map(order => `
-                <tr class="hover:bg-slate-50/50 transition-colors">
-                    <td class="p-5 font-mono text-xs text-orange-600 font-bold">#${order._id.toString().slice(-6).toUpperCase()}</td>
-                    <td class="p-5 text-sm font-bold text-slate-700">${order.user ? order.user.username : 'Guest'}</td>
-                    <td class="p-5 text-sm font-black text-slate-900">₹${order.totalAmount}</td>
-                    <td class="p-5">
-                        <select onchange="updateOrderStatus('${order._id}', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
-                            ${['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => `
-                                <option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>
-                            `).join('')}
-                        </select>
-                    </td>
-                    <td class="p-5 text-xs font-bold text-slate-400 text-right">${new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
-                </tr>
-            `).join('');
-
+            ordersTbody.innerHTML = (data.orders || []).map(order => `
+    <tr class="hover:bg-slate-50/50 transition-colors">
+        <td class="p-5 font-mono text-xs text-orange-600 font-bold">#${order._id.toString().slice(-6).toUpperCase()}</td>
+        <td class="p-5 text-sm font-bold text-slate-700">${order.user ? order.user.username : 'Guest'}</td>
+        <td class="p-5 text-sm font-black text-slate-900">₹${order.totalAmount}</td>
+        <td class="p-5">
+            <select onchange="updateOrderStatus('${order._id}', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
+                ${['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => `
+                    <option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>
+                `).join('')}
+            </select>
+        </td>
+        <td class="p-5 text-xs font-bold text-slate-400 text-right">${new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
+    </tr>
+`).join(''); 
             // Note: Menu items are usually less volatile, but can be updated similarly if needed.
         } catch (e) { console.error("Table refresh failed", e); }
     }
@@ -537,15 +540,16 @@ function updateBadgeUI(badge, stock) {
         return outputArray;
     }
 
-   async function deleteFeedback(id, event) {
-    // 'event.currentTarget' is the button itself
+  async function deleteFeedback(id, event) {
     const button = event.currentTarget;
-    const card = button.closest('.group'); 
+    const card = button.closest('.group'); // The feedback card
 
-    openConfirmModal("Delete Feedback?", "Are you sure?", async () => {
+    openConfirmModal("Delete Feedback?", "Are you sure you want to remove this?", async () => {
+        const icon = button.querySelector('i');
+        const originalClass = icon.className;
+
         try {
-            // Add a "loading" state to the trash icon
-            const icon = button.querySelector('i');
+            // Visual feedback: Start loading spinner
             icon.className = 'fas fa-spinner fa-spin text-xs';
 
             const res = await fetch(`/admin/feedback/delete/${id}`, { 
@@ -556,14 +560,27 @@ function updateBadgeUI(badge, stock) {
             if (data.success) {
                 showToast("Feedback removed");
 
-                // 1. Update Counter
-                const countElement = document.getElementById('feedback-count');
-                if (countElement) {
-                    let currentCount = parseInt(countElement.innerText);
-                    countElement.innerText = Math.max(0, currentCount - 1);
+                // --- AUTOMATIC REDUCTION LOGIC ---
+                const mainCountEl = document.getElementById('feedback-count');
+                const tabBadgeEl = document.getElementById('feedback-badge');
+
+                // Get current value from either element
+                const currentCount = parseInt(mainCountEl?.textContent || tabBadgeEl?.textContent || 0);
+                const newCount = Math.max(0, currentCount - 1);
+
+                // Update the Large Stat Card
+                if (mainCountEl) mainCountEl.textContent = newCount;
+
+                // Update the Small Tab Badge
+                if (tabBadgeEl) {
+                    tabBadgeEl.textContent = newCount;
+                    // Hide the badge entirely if count is 0
+                    if (newCount === 0) {
+                        tabBadgeEl.classList.add('hidden');
+                    }
                 }
 
-                // 2. Animate and Remove Card
+                // --- SMOOTH UI REMOVAL ---
                 if (card) {
                     card.style.opacity = '0';
                     card.style.transform = 'scale(0.95)';
@@ -572,12 +589,11 @@ function updateBadgeUI(badge, stock) {
                 }
             } else {
                 showToast(data.message || "Delete failed");
-                icon.className = 'fas fa-trash-alt text-xs'; // Reset icon on failure
+                icon.className = originalClass; 
             }
         } catch (err) {
             showToast("Network Error");
-            console.error(err);
-            if (icon) icon.className = 'fas fa-trash-alt text-xs';
+            icon.className = 'fas fa-trash-alt text-xs';
         }
     });
 }

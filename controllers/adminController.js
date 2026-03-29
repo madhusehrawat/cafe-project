@@ -8,24 +8,30 @@ const Feedback = require("../models/Feedback");
 /**
  * Helper: Calculates business metrics
  */
-const calculateStats = (orders, products) => {
-    // Only count delivered orders for revenue
-    const totalRevenue = orders
+const calculateStats = (orders = [], products = [], feedbacks = []) => {
+    // 1. Revenue: Only count 'Delivered' orders
+    const totalRevenue = (orders || [])
         .filter(order => order.status && order.status.toLowerCase() === 'delivered')
         .reduce((sum, order) => sum + parseFloat(order.totalAmount || 0), 0);
 
+    // 2. Active Orders: Filter for non-final states
     const activeStatuses = ['pending', 'preparing', 'out for delivery'];
-    const activeOrders = orders.filter(o => 
+    const activeOrders = (orders || []).filter(o => 
         o.status && activeStatuses.includes(o.status.toLowerCase())
     ).length;
 
-    const lowStockCount = products.filter(p => p.countInStock <= 3).length;
+    // 3. Low Stock: Threshold of 3 or less
+    const lowStockCount = (products || []).filter(p => p.countInStock <= 3).length;
+
+    // 4. Feedback Count
+    const totalFeedbacks = (feedbacks || []).length;
 
     return {
-        totalRevenue: totalRevenue.toFixed(2), // Clean number for frontend
-        orderCount: orders.length,
+        totalRevenue: totalRevenue.toFixed(2),
+        orderCount: (orders || []).length,
         activeOrders: activeOrders,
-        lowStockCount: lowStockCount 
+        lowStockCount: lowStockCount,
+        feedbackCount: totalFeedbacks // New property for your dashboard
     };
 };
 
@@ -38,7 +44,7 @@ exports.getAdminDashboard = async (req, res) => {
             Feedback.find().sort({ createdAt: -1 }).lean() // Updated to Feedback model
         ]);
 
-        const stats = calculateStats(orders, products);
+        const stats = calculateStats(orders, products,feedbacks);
 
         res.render("admin/dashboard", { 
             user: req.user, 
@@ -57,14 +63,32 @@ exports.getAdminDashboard = async (req, res) => {
 // 2. AJAX Endpoint for Stats Refresh
 exports.getDashboardData = async (req, res) => {
     try {
-        const [orders, products] = await Promise.all([
-            Order.find().lean(),
-            Product.find().lean()
+        // 1. Fetch all data in parallel for speed
+        const [orders, products, feedbacks] = await Promise.all([
+            Order.find().populate('user', 'username').sort({ createdAt: -1 }).lean(),
+            Product.find().lean(),
+            Feedback.find().sort({ createdAt: -1 }).lean()
         ]);
-        const stats = calculateStats(orders, products);
-        res.json({ success: true, stats });
+
+        // 2. Calculate stats using the helper function we refined
+        // Ensure feedbacks is passed so stats.feedbackCount works
+        const stats = calculateStats(orders, products, feedbacks);
+
+        // 3. Send EVERYTHING back to the frontend
+        res.json({ 
+            success: true, 
+            stats,     // For the top 4 cards
+            orders,    // For the Orders table .map()
+            products,  // For the Menu table .map()
+            feedbacks  // For the Feedback grid .map()
+        });
+        
     } catch (err) {
-        res.status(500).json({ success: false });
+        console.error("Dashboard Data Fetch Error:", err);
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch live dashboard data" 
+        });
     }
 };
 
