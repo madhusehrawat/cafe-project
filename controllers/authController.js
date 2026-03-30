@@ -5,25 +5,28 @@ const nodemailer = require("nodemailer");
 const crypto = require('crypto');
 
 // --- UTILS: Transporter ---
+const dns = require('dns');
+
+// 1. Force the entire application to prefer IPv4 over IPv6
+dns.setDefaultResultOrder('ipv4first');
+
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Let Nodemailer handle the host/port defaults
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, 
-    // FORCE IPv4 (This is the most important line for Render)
+    port: 587,
+    secure: false, // Must be false for 587
+    // This is the line that usually solves it for Render:
     family: 4, 
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+        pass: process.env.EMAIL_PASS 
     },
-    // Add these to prevent the "Refused" or "Timeout" errors
-    connectionTimeout: 10000, 
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
     tls: {
-        // This ensures the connection doesn't drop due to certificate issues
-        rejectUnauthorized: false 
-    }
+        // This ensures the connection isn't dropped by Render's firewall
+        rejectUnauthorized: false,
+        servername: 'smtp.gmail.com'
+    },
+    connectionTimeout: 25000, // Increased to 25s for Render Free Tier
+    greetingTimeout: 25000
 });
 transporter.verify((error, success) => {
     if (error) {
