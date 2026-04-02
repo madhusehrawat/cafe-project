@@ -1,87 +1,104 @@
-const nodemailer = require('nodemailer');
+const tls = require('tls');
 const dns = require('dns');
 
-// 1. GLOBAL FIX: This tells your Node.js app to ignore IPv6.
-// This is the #1 fix for the 'ENETUNREACH' error on Render.
 dns.setDefaultResultOrder('ipv4first');
 
 class CafeMailer {
     constructor() {
-        // 2. Create the internal transporter
-        this.transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, // TLS
-            family: 4,     // Force IPv4
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            },
-            tls: {
-                rejectUnauthorized: false,
-                servername: 'smtp.gmail.com'
-            },
-            connectionTimeout: 20000,
-            greetingTimeout: 20000
-        });
+        this.host = 'smtp.gmail.com';
+        this.port = 465; // Using 465 for Direct TLS
+        this.user = process.env.EMAIL_USER;
+        this.pass = process.env.EMAIL_PASS;
+    }
 
-        // 3. Self-Verify: Automatically checks connection when the server starts
-        this.transporter.verify((error) => {
-            if (error) {
-                console.error("❌ Mailer Connection Failed:", error.message);
-            } else {
-                console.log("✅ Mailer Status: IPv4 Connection Secured!");
-            }
-        });
+    // Helper to encode strings to Base64 (Required for SMTP Auth)
+    toBase64(str) {
+        return Buffer.from(str).toString('base64');
     }
 
     /**
-     * Custom method to send OTPs
-     * @param {string} email - Recipient
-     * @param {string} otp - The 6-digit code
+     * Native SMTP Sender using TLS
      */
-    async sendOTP(email, otp) {
-        const mailOptions = {
-            from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'Your Verification Code',
-            html: `
-                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee;">
-                    <h2 style="color: #5d4037;">FullStack Cafe</h2>
-                    <p>Use the code below to verify your account:</p>
-                    <div style="font-size: 24px; font-weight: bold; color: #ff6f00;">${otp}</div>
-                    <p>This code expires in 5 minutes.</p>
-                </div>
-            `
-        };
+    async sendRawMail({ to, subject, html }) {
+        return new Promise((resolve, reject) => {
+            const socket = tls.connect(this.port, this.host, {
+                servername: this.host,
+                rejectUnauthorized: false
+            });
 
-        try {
-            const info = await this.transporter.sendMail(mailOptions);
-            console.log("📧 OTP sent to:", email);
-            return info;
-        } catch (err) {
-            console.error("📧 Delivery Error:", err.message);
-            throw err;
-        }
-    }
+            let step = 0;
 
+            const send = (data) => {
+                socket.write(data + '\r\n');
+            };
 
-// Add this INSIDE your CafeMailer class in utils/mailer.js
-async sendMail(options) {
-    try {
-        const info = await this.transporter.sendMail({
-            from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`,
-            to: options.to,
-            subject: options.subject,
-            html: options.html
+            socket.on('secureConnect', () => {
+                console.log("Connected to SMTP Server...");
+            });
+
+            socket.on('data', (data) => {
+                const response = data.toString();
+                // console.log('S:', response); // Debug server responses
+
+                if (response.startsWith('220') && step === 0) {
+                    send(`EHLO ${this.host}`);
+                    step++;
+                } else if (response.startsWith('250') && step === 1) {
+                    send('AUTH LOGIN');
+                    step++;
+                } else if (response.startsWith('334') && step === 2) {
+                    send(this.toBase64(this.user));
+                    step++;
+                } else if (response.startsWith('334') && step === 3) {
+                    send(this.toBase64(this.pass));
+                    step++;
+                } else if (response.startsWith('235') && step === 4) {
+                    send(`MAIL FROM:<${this.user}>`);
+                    step++;
+                } else if (response.startsWith('250') && step === 5) {
+                    send(`RCPT TO:<${to}>`);
+                    step++;
+                } else if (response.startsWith('250') && step === 6) {
+                    send('DATA');
+                    step++;
+                } else if (response.startsWith('354') && step === 7) {
+                    const message = [
+                        `From: "FullStack Cafe" <${this.user}>`,
+                        `To: ${to}`,
+                        `Subject: ${subject}`,
+                        'Content-Type: text/html; charset=utf-8',
+                        '',
+                        html,
+                        '.'
+                    ].join('\r\n');
+                    send(message);
+                    step++;
+                } else if (response.startsWith('250') && step === 8) {
+                    send('QUIT');
+                    console.log(`📧 Native Mail Sent to: ${to}`);
+                    resolve(true);
+                }
+            });
+
+            socket.on('error', (err) => {
+                console.error("Native Mailer Error:", err);
+                reject(err);
+            });
         });
-        return info;
-    } catch (err) {
-        console.error("Custom Mailer Error:", err);
-        throw err;
+    }
+
+    async sendOTP(email, otp) {
+        const html = `
+            <div style="font-family: sans-serif; padding: 20px;">
+                <h2 style="color: #5d4037;">FullStack Cafe</h2>
+                <p>Your code: <strong style="color: #ff6f00; font-size: 20px;">${otp}</strong></p>
+            </div>`;
+        return this.sendRawMail({ to: email, subject: 'Verification Code', html });
+    }
+
+    async sendMail(options) {
+        return this.sendRawMail(options);
     }
 }
-}
 
-// Export a single instance (Singleton)
 module.exports = new CafeMailer();
