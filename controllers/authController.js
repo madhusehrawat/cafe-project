@@ -29,15 +29,24 @@ exports.postSignup = async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
+        // 1. Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(400).json({ success: false, error: "Email already registered" });
+            return res.status(400).json({ 
+                success: false, 
+                error: "Email already registered. Please login." 
+            });
         }
 
-        // Use the utility to generate and send the email
-        const otp = await sendOTP(email); 
+        // 2. Hash the password BEFORE sending the email 
+        // (This keeps the response time snappy)
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // 3. Attempt to send the OTP using the Custom IPv4 Mailer
+        // If this fails, it will catch in the 'catch' block below
+        const otp = await sendOTP(email); 
+
+        // 4. Save to temporary memory store ONLY after email succeeds
         otpStore.set(email, {
             username,
             password: hashedPassword,
@@ -45,10 +54,28 @@ exports.postSignup = async (req, res) => {
             expires: Date.now() + 300000 // 5 minutes
         });
 
-        res.status(200).json({ success: true, message: "OTP sent to email" });
+        console.log(`✅ OTP stored for ${email}`);
+        
+        res.status(200).json({ 
+            success: true, 
+            message: "A verification code has been sent to your email." 
+        });
+
     } catch (err) {
         console.error("SIGNUP ERROR:", err);
-        res.status(500).json({ success: false, error: "Failed to send verification email." });
+        
+        // Specific error handling for network issues
+        if (err.message.includes('ENETUNREACH') || err.message.includes('timeout')) {
+            return res.status(500).json({ 
+                success: false, 
+                error: "Mail server unreachable. Please try again in a moment." 
+            });
+        }
+
+        res.status(500).json({ 
+            success: false, 
+            error: "Failed to process signup. Please check your email address." 
+        });
     }
 };
 
