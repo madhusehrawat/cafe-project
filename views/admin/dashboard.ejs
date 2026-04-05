@@ -155,9 +155,53 @@
                 <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i class="fas fa-comment-dots"></i></div>
             </div>
             <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Feedback</p>
-       <h3 id="feedback-count" class="text-2xl font-black text-slate-800 mt-1">
-    <%= feedbacks.length %>
-</h3>
+            <h3 id="feedback-count" class="text-2xl font-black text-slate-800 mt-1"><%= feedbacks.length %></h3>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 mb-8 overflow-hidden">
+        <button onclick="toggleBroadcast()" class="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-orange-100 text-orange-600 rounded-2xl">
+                    <i class="fas fa-bullhorn text-xl"></i>
+                </div>
+                <div class="text-left">
+                    <h3 class="text-xl font-black text-slate-800">Broadcast Hub</h3>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Send push notifications to all users</p>
+                </div>
+            </div>
+            <i id="bc-chevron" class="fas fa-chevron-down text-slate-300 transition-transform"></i>
+        </button>
+
+        <div id="broadcast-content" class="hidden border-t border-slate-50 p-8 bg-slate-50/30">
+            <form id="broadcastForm" class="max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Notification Title</label>
+                        <input type="text" id="bcTitle" placeholder="e.g., Happy Hour! ☕" required
+                               class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all font-bold">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Target Link (Optional)</label>
+                        <input type="text" id="bcUrl" placeholder="/menu"
+                               class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all font-medium">
+                    </div>
+                </div>
+                
+                <div class="flex flex-col">
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Message Content</label>
+                    <textarea id="bcMessage" placeholder="What's happening at the cafe today?" required
+                              class="w-full mt-1 flex-grow px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-50 transition-all font-medium resize-none min-h-[120px]"></textarea>
+                </div>
+
+                <div class="md:col-span-2 flex justify-end pt-2">
+                    <button type="submit" id="bcSubmitBtn"
+                            class="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 hover:bg-black transition-all shadow-xl active:scale-95">
+                        <span>Dispatch to All Users</span>
+                        <i class="fas fa-paper-plane text-xs text-orange-400"></i>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -169,8 +213,8 @@
                 <button id="feedbackTab" onclick="switchView('feedback')" class="pb-4 font-black text-sm text-slate-300 whitespace-nowrap transition-all border-b-2 border-transparent flex items-center gap-2">
                     Feedback Hub 
                     <span id="feedback-badge" class="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full <%= feedbacks.length > 0 ? '' : 'hidden' %>">
-        <%= feedbacks.length %>
-    </span>
+                        <%= feedbacks.length %>
+                    </span>
                 </button>
             </div>
             <div class="relative w-full md:w-80">
@@ -238,27 +282,27 @@
                                 </div>
                             </td>
                             <td class="p-5">
-    <div class="flex items-center gap-4">
-        <input type="number" id="stock-input-<%= product._id %>" value="<%= product.countInStock %>" 
-               onchange="updateStock('<%= product._id %>')"
-               class="w-16 p-2 rounded-xl border border-slate-100 text-center font-black text-sm outline-none">
-        
-        <% 
-            let badgeClass = 'bg-green-400';
-            let badgeText = 'OK';
-            if (product.countInStock <= 0) {
-                badgeClass = 'bg-slate-400';
-                badgeText = 'OUT';
-            } else if (product.countInStock <= 5) {
-                badgeClass = 'bg-orange-500';
-                badgeText = 'LOW';
-            }
-        %>
-        <span id="badge-<%= product._id %>" class="text-[8px] font-black px-2 py-1 rounded-lg text-white <%= badgeClass %>">
-            <%= badgeText %>
-        </span>
-    </div>
-</td>
+                                <div class="flex items-center gap-4">
+                                    <input type="number" id="stock-input-<%= product._id %>" value="<%= product.countInStock %>" 
+                                           onchange="updateStock('<%= product._id %>')"
+                                           class="w-16 p-2 rounded-xl border border-slate-100 text-center font-black text-sm outline-none">
+                                    
+                                    <% 
+                                        let badgeClass = 'bg-green-400';
+                                        let badgeText = 'OK';
+                                        if (product.countInStock <= 0) {
+                                            badgeClass = 'bg-slate-400';
+                                            badgeText = 'OUT';
+                                        } else if (product.countInStock <= 5) {
+                                            badgeClass = 'bg-orange-500';
+                                            badgeText = 'LOW';
+                                        }
+                                    %>
+                                    <span id="badge-<%= product._id %>" class="text-[8px] font-black px-2 py-1 rounded-lg text-white <%= badgeClass %>">
+                                        <%= badgeText %>
+                                    </span>
+                                </div>
+                            </td>
                             <td class="p-5 text-right">
                                 <button id="toggle-<%= product._id %>" onclick="toggleProductStatus('<%= product._id %>')" 
                                         class="text-[10px] font-black px-4 py-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all uppercase">
@@ -285,8 +329,8 @@
                             "<%= item.message %>"
                         </div>
                         <button onclick="deleteFeedback('<%= item._id %>', event)" class="absolute top-4 right-4 text-slate-200 hover:text-red-500 transition-colors">
-    <i class="fas fa-trash-alt text-xs"></i>
-</button>
+                            <i class="fas fa-trash-alt text-xs"></i>
+                        </button>
                     </div>
                 <% }) %>
             </div>
@@ -346,19 +390,61 @@
         });
     }
 
+    // --- BROADCAST LOGIC ---
+    function toggleBroadcast() {
+        const content = document.getElementById('broadcast-content');
+        const chevron = document.getElementById('bc-chevron');
+        const isHidden = content.classList.contains('hidden');
+        
+        if (isHidden) {
+            content.classList.remove('hidden');
+            chevron.style.transform = 'rotate(180deg)';
+        } else {
+            content.classList.add('hidden');
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    document.getElementById('broadcastForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const title = document.getElementById('bcTitle').value;
+        const message = document.getElementById('bcMessage').value;
+        const url = document.getElementById('bcUrl').value || '/';
+
+        openConfirmModal("Blast Message?", "This will send a live notification to all registered users. Proceed?", async () => {
+            const btn = document.getElementById('bcSubmitBtn');
+            const originalContent = btn.innerHTML;
+            try {
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Dispatched...`;
+                const res = await fetch('/admin/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, message, url })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Broadcast successful!");
+                    document.getElementById('broadcastForm').reset();
+                    toggleBroadcast();
+                } else {
+                    showToast(data.message || "Failed to send");
+                }
+            } catch (err) {
+                showToast("Connection Error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        });
+    });
+
     // --- POLLING ENGINE ---
-    // Start polling every 30 seconds
     function startPolling() {
         setInterval(async () => {
             const dot = document.getElementById('polling-dot');
-            dot.classList.add('sync-indicator'); // Visual feedback
-            
-            await Promise.all([
-                refreshDashboardStats(),
-                refreshTables()
-            ]);
-            
-            console.log("Dashboard Auto-Synced: " + new Date().toLocaleTimeString());
+            dot.classList.add('sync-indicator'); 
+            await Promise.all([refreshDashboardStats(), refreshTables()]);
         }, 30000); 
     }
 
@@ -370,41 +456,35 @@
                 document.getElementById('stat-revenue').textContent = data.stats.totalRevenue;
                 document.getElementById('stat-active').textContent = data.stats.activeOrders;
                 document.getElementById('stat-low').textContent = data.stats.lowStockCount;
-                
-                // Update feedback badge
                 const fBadge = document.getElementById('feedback-badge');
-                document.getElementById('stat-feedback').textContent = data.feedbacks.length;
+                document.getElementById('feedback-count').textContent = data.feedbacks.length;
                 fBadge.textContent = data.feedbacks.length;
                 data.feedbacks.length > 0 ? fBadge.classList.remove('hidden') : fBadge.classList.add('hidden');
             }
         } catch (err) { console.warn("Stats sync failed"); }
     }
 
-    // Function to re-render table contents without full page reload
     async function refreshTables() {
         try {
             const res = await fetch('/admin/dashboard-data');
             const data = await res.json();
             if (!data.success) return;
-
-            // 1. Refresh Orders
             const ordersTbody = document.getElementById('orders-tbody');
             ordersTbody.innerHTML = (data.orders || []).map(order => `
-    <tr class="hover:bg-slate-50/50 transition-colors">
-        <td class="p-5 font-mono text-xs text-orange-600 font-bold">#${order._id.toString().slice(-6).toUpperCase()}</td>
-        <td class="p-5 text-sm font-bold text-slate-700">${order.user ? order.user.username : 'Guest'}</td>
-        <td class="p-5 text-sm font-black text-slate-900">₹${order.totalAmount}</td>
-        <td class="p-5">
-            <select onchange="updateOrderStatus('${order._id}', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
-                ${['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => `
-                    <option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>
-                `).join('')}
-            </select>
-        </td>
-        <td class="p-5 text-xs font-bold text-slate-400 text-right">${new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
-    </tr>
-`).join(''); 
-            // Note: Menu items are usually less volatile, but can be updated similarly if needed.
+                <tr class="hover:bg-slate-50/50 transition-colors">
+                    <td class="p-5 font-mono text-xs text-orange-600 font-bold">#${order._id.toString().slice(-6).toUpperCase()}</td>
+                    <td class="p-5 text-sm font-bold text-slate-700">${order.user ? order.user.username : 'Guest'}</td>
+                    <td class="p-5 text-sm font-black text-slate-900">₹${order.totalAmount}</td>
+                    <td class="p-5">
+                        <select onchange="updateOrderStatus('${order._id}', this.value)" class="text-xs font-black px-3 py-2 border border-slate-100 rounded-xl bg-white outline-none cursor-pointer focus:ring-2 focus:ring-orange-100">
+                            ${['Pending', 'Preparing', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => `
+                                <option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>
+                            `).join('')}
+                        </select>
+                    </td>
+                    <td class="p-5 text-xs font-bold text-slate-400 text-right">${new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
+                </tr>
+            `).join(''); 
         } catch (e) { console.error("Table refresh failed", e); }
     }
 
@@ -454,64 +534,42 @@
         } catch (e) { showToast("Sync error"); }
     }
 
-    // Initialize Polling on load
-    window.onload = startPolling;
-
-    // --- SEARCH ---
-    function filterTable() {
-        const query = document.getElementById('tableSearch').value.toLowerCase();
-        document.querySelectorAll('tbody tr, #feedback-section .group').forEach(el => {
-            el.style.display = el.innerText.toLowerCase().includes(query) ? '' : 'none';
-        });
-    }
-
     async function updateStock(productId) {
-    const input = document.getElementById(`stock-input-${productId}`);
-    const badge = document.getElementById(`badge-${productId}`);
-    const newValue = parseInt(input.value);
-
-    // 1. Immediate UI Feedback (Visual State)
-    updateBadgeUI(badge, newValue);
-
-    try {
-        const res = await fetch('/admin/product/update-field', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                productId, 
-                field: 'countInStock', 
-                value: newValue 
-            })
-        });
-
-        if ((await res.json()).success) {
-            input.classList.add('update-success');
-            setTimeout(() => input.classList.remove('update-success'), 1000);
-            showToast(`Stock updated to ${newValue}`);
-            refreshDashboardStats(); // Sync the "Low Stock" counter at the top
+        const input = document.getElementById(`stock-input-${productId}`);
+        const badge = document.getElementById(`badge-${productId}`);
+        const newValue = parseInt(input.value);
+        updateBadgeUI(badge, newValue);
+        try {
+            const res = await fetch('/admin/product/update-field', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ productId, field: 'countInStock', value: newValue })
+            });
+            if ((await res.json()).success) {
+                input.classList.add('update-success');
+                setTimeout(() => input.classList.remove('update-success'), 1000);
+                showToast(`Stock updated to ${newValue}`);
+                refreshDashboardStats();
+            }
+        } catch (e) {
+            showToast("Stock sync failed");
+            input.classList.add('update-error');
         }
-    } catch (e) {
-        showToast("Stock sync failed");
-        input.classList.add('update-error');
     }
-}
 
-// Helper to handle the CSS classes and Text for the badge
-function updateBadgeUI(badge, stock) {
-    // Reset classes
-    badge.classList.remove('bg-green-400', 'bg-red-400', 'bg-slate-400', 'bg-orange-500');
-    
-    if (stock <= 0) {
-        badge.textContent = 'OUT';
-        badge.classList.add('bg-slate-400');
-    } else if (stock <= 5) {
-        badge.textContent = 'LOW';
-        badge.classList.add('bg-orange-500');
-    } else {
-        badge.textContent = 'OK';
-        badge.classList.add('bg-green-400');
+    function updateBadgeUI(badge, stock) {
+        badge.classList.remove('bg-green-400', 'bg-red-400', 'bg-slate-400', 'bg-orange-500');
+        if (stock <= 0) {
+            badge.textContent = 'OUT';
+            badge.classList.add('bg-slate-400');
+        } else if (stock <= 5) {
+            badge.textContent = 'LOW';
+            badge.classList.add('bg-orange-500');
+        } else {
+            badge.textContent = 'OK';
+            badge.classList.add('bg-green-400');
+        }
     }
-}
 
     // --- WEB PUSH & UTIL ---
     async function requestPushPermission() {
@@ -540,63 +598,52 @@ function updateBadgeUI(badge, stock) {
         return outputArray;
     }
 
-  async function deleteFeedback(id, event) {
-    const button = event.currentTarget;
-    const card = button.closest('.group'); // The feedback card
-
-    openConfirmModal("Delete Feedback?", "Are you sure you want to remove this?", async () => {
-        const icon = button.querySelector('i');
-        const originalClass = icon.className;
-
-        try {
-            // Visual feedback: Start loading spinner
-            icon.className = 'fas fa-spinner fa-spin text-xs';
-
-            const res = await fetch(`/admin/feedback/delete/${id}`, { 
-                method: 'DELETE' 
-            });
-            const data = await res.json();
-
-            if (data.success) {
-                showToast("Feedback removed");
-
-                // --- AUTOMATIC REDUCTION LOGIC ---
-                const mainCountEl = document.getElementById('feedback-count');
-                const tabBadgeEl = document.getElementById('feedback-badge');
-
-                // Get current value from either element
-                const currentCount = parseInt(mainCountEl?.textContent || tabBadgeEl?.textContent || 0);
-                const newCount = Math.max(0, currentCount - 1);
-
-                // Update the Large Stat Card
-                if (mainCountEl) mainCountEl.textContent = newCount;
-
-                // Update the Small Tab Badge
-                if (tabBadgeEl) {
-                    tabBadgeEl.textContent = newCount;
-                    // Hide the badge entirely if count is 0
-                    if (newCount === 0) {
-                        tabBadgeEl.classList.add('hidden');
+    async function deleteFeedback(id, event) {
+        const button = event.currentTarget;
+        const card = button.closest('.group');
+        openConfirmModal("Delete Feedback?", "Are you sure you want to remove this?", async () => {
+            const icon = button.querySelector('i');
+            const originalClass = icon.className;
+            try {
+                icon.className = 'fas fa-spinner fa-spin text-xs';
+                const res = await fetch(`/admin/feedback/delete/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Feedback removed");
+                    const mainCountEl = document.getElementById('feedback-count');
+                    const tabBadgeEl = document.getElementById('feedback-badge');
+                    const currentCount = parseInt(mainCountEl?.textContent || tabBadgeEl?.textContent || 0);
+                    const newCount = Math.max(0, currentCount - 1);
+                    if (mainCountEl) mainCountEl.textContent = newCount;
+                    if (tabBadgeEl) {
+                        tabBadgeEl.textContent = newCount;
+                        if (newCount === 0) tabBadgeEl.classList.add('hidden');
                     }
+                    if (card) {
+                        card.style.opacity = '0';
+                        card.style.transform = 'scale(0.95)';
+                        card.style.transition = 'all 0.3s ease';
+                        setTimeout(() => card.remove(), 300);
+                    }
+                } else {
+                    showToast(data.message || "Delete failed");
+                    icon.className = originalClass; 
                 }
-
-                // --- SMOOTH UI REMOVAL ---
-                if (card) {
-                    card.style.opacity = '0';
-                    card.style.transform = 'scale(0.95)';
-                    card.style.transition = 'all 0.3s ease';
-                    setTimeout(() => card.remove(), 300);
-                }
-            } else {
-                showToast(data.message || "Delete failed");
-                icon.className = originalClass; 
+            } catch (err) {
+                showToast("Network Error");
+                icon.className = 'fas fa-trash-alt text-xs';
             }
-        } catch (err) {
-            showToast("Network Error");
-            icon.className = 'fas fa-trash-alt text-xs';
-        }
-    });
-}
+        });
+    }
+
+    function filterTable() {
+        const query = document.getElementById('tableSearch').value.toLowerCase();
+        document.querySelectorAll('tbody tr, #feedback-section .group').forEach(el => {
+            el.style.display = el.innerText.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
+
+    window.onload = startPolling;
 </script>
 </body>
 </html>

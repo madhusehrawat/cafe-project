@@ -35,6 +35,50 @@ const calculateStats = (orders = [], products = [], feedbacks = []) => {
     };
 };
 
+
+exports.broadcastNotification = async (req, res) => {
+    try {
+        const { title, message, url } = req.body;
+
+        // 1. Fetch only users who have a push subscription
+        const users = await User.find({ subscription: { $exists: true, $ne: null } });
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "No subscribed users found." });
+        }
+
+        const payload = JSON.stringify({
+            title: title || "FullStack Cafe Update",
+            body: message || "Check out our latest treats!",
+            icon: '/img/logo.png', // Update to your logo path
+            data: { url: url || '/' }
+        });
+
+        // 2. Map through users and send notifications
+        const notifications = users.map(user => {
+            return webpush.sendNotification(user.subscription, payload)
+                .catch(async (err) => {
+                    // 3. Clean up expired/invalid subscriptions (404 or 410)
+                    if (err.statusCode === 404 || err.statusCode === 410) {
+                        console.log(`Removing expired subscription for user: ${user._id}`);
+                        await User.findByIdAndUpdate(user._id, { $unset: { subscription: 1 } });
+                    }
+                });
+        });
+
+        await Promise.all(notifications);
+
+        res.json({ 
+            success: true, 
+            message: `Broadcast sent to ${users.length} users successfully.` 
+        });
+
+    } catch (err) {
+        console.error("Broadcast Error:", err);
+        res.status(500).json({ success: false, message: "Server error during broadcast." });
+    }
+};
+
 // 1. Initial Page Render
 exports.getAdminDashboard = async (req, res) => {
     try {

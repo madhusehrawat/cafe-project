@@ -83,6 +83,44 @@ app.post('/subscribe', async (req, res) => {
     }
 });
 
+app.post('/admin/broadcast', async (req, res) => {
+    const { title, message, url } = req.body;
+
+    try {
+        // Find all users where pushSubscription field IS NOT null/empty
+        const usersWithSub = await User.find({ 
+            pushSubscription: { $exists: true, $ne: null } 
+        });
+
+        if (usersWithSub.length === 0) {
+            return res.json({ 
+                success: false, 
+                message: "No subscribed users found in the database." 
+            });
+        }
+
+        const payload = JSON.stringify({ title, message, url });
+
+        // Loop through users and send the notification
+        const broadcastPromises = usersWithSub.map(user => {
+            return webpush.sendNotification(user.pushSubscription, payload)
+                .catch(async (err) => {
+                    // If the subscription is expired (404/410), clean it up
+                    if (err.statusCode === 404 || err.statusCode === 410) {
+                        await User.findByIdAndUpdate(user._id, { $unset: { pushSubscription: 1 } });
+                    }
+                });
+        });
+
+        await Promise.all(broadcastPromises);
+        res.json({ success: true, message: `Broadcast sent to ${usersWithSub.length} users.` });
+
+    } catch (err) {
+        console.error("Broadcast Error:", err);
+        res.status(500).json({ success: false, message: "Server error during broadcast." });
+    }
+});
+
 // 2. App Routes
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');

@@ -57,6 +57,7 @@ const adminOnly = (req, res, next) => {
 router.get("/dashboard", adminOnly, adminController.getAdminDashboard);
 router.get("/dashboard-data", adminOnly, adminController.getDashboardData);
 
+
 // --- Product Management ---
 
 // 1. Pages
@@ -78,5 +79,8 @@ router.post("/order/status", adminOnly, adminController.updateOrderStatus);
 // --- Feedback Hub (Renamed from Support Hub) ---
 // Matches the 'deleteFeedback' function in your updated adminController
 router.delete("/feedback/delete/:id", adminOnly, adminController.deleteFeedback);
+
+
+router.post('/broadcast', adminOnly, adminController.broadcastNotification);
 
 module.exports = router;
