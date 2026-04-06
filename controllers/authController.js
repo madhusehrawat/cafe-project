@@ -1,16 +1,13 @@
 const User = require("../models/User");
+const OtpStore = require("../models/OtpStore");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require('crypto');
 
-// FIX: Importing the utility and the mailer correctly
-const sendOTP = require("../utils/sendotp"); 
-const { sendMail } = require("../utils/mailer");
+const sendOTP = require("../utils/sendotp"); // uses Nodemailer internally
 
-// Initialize memory store for OTPs (Signup & Resets)
-const otpStore = new Map();
-
-// --- PAGE RENDERING ---
+// ─────────────────────────────────────────────
+// PAGE RENDERING
+// ─────────────────────────────────────────────
 
 exports.getSignupPage = (req, res) => res.render("signup");
 
@@ -23,147 +20,190 @@ exports.getForgotPasswordPage = (req, res) => {
     res.render("forgot-password", { error: null });
 };
 
-// --- AUTH LOGIC ---
+// ─────────────────────────────────────────────
+// SIGNUP — sends OTP, stores pending data in DB
+// ─────────────────────────────────────────────
 
 exports.postSignup = async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
-        // 1. Check if user already exists
+        // 1. Check if a verified user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(400).json({ 
-                success: false, 
-                error: "Email already registered. Please login." 
+            return res.status(400).json({
+                success: false,
+                error: "Email already registered. Please login."
             });
         }
 
-        // 2. Hash the password BEFORE sending the email 
-        // (This keeps the response time snappy)
+        // 2. Hash password before sending email (keeps response fast)
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 3. Attempt to send the OTP using the Custom IPv4 Mailer
-        // If this fails, it will catch in the 'catch' block below
-        const otp = await sendOTP(email); 
+        // 3. Send OTP email
+        const otp = await sendOTP(email);
 
-        // 4. Save to temporary memory store ONLY after email succeeds
-        otpStore.set(email, {
-            username,
-            password: hashedPassword,
-            otp,
-            expires: Date.now() + 300000 // 5 minutes
-        });
+        // 4. Upsert into OtpStore (overwrites any previous pending signup for this email)
+        await OtpStore.findOneAndUpdate(
+            { email },
+            {
+                otp,
+                type: "signup",
+                username,
+                password: hashedPassword,
+                expires: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
+            },
+            { upsert: true, new: true }
+        );
 
-        console.log(`✅ OTP stored for ${email}`);
-        
-        res.status(200).json({ 
-            success: true, 
-            message: "A verification code has been sent to your email." 
+        console.log(`✅ OTP stored in DB for ${email}`);
+
+        res.status(200).json({
+            success: true,
+            message: "A verification code has been sent to your email."
         });
 
     } catch (err) {
         console.error("SIGNUP ERROR:", err);
-        
-        // Specific error handling for network issues
-        if (err.message.includes('ENETUNREACH') || err.message.includes('timeout')) {
-            return res.status(500).json({ 
-                success: false, 
-                error: "Mail server unreachable. Please try again in a moment." 
-            });
-        }
-
-        res.status(500).json({ 
-            success: false, 
-            error: "Failed to process signup. Please check your email address." 
+        res.status(500).json({
+            success: false,
+            error: "Failed to process signup. Please check your email address."
         });
     }
 };
 
+// ─────────────────────────────────────────────
+// VERIFY OTP — creates the user account
+// ─────────────────────────────────────────────
+
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
-        const tempData = otpStore.get(email);
 
-        if (!tempData || tempData.expires < Date.now()) {
-            if (tempData) otpStore.delete(email);
-            return res.status(400).json({ success: false, error: "OTP expired or invalid session." });
+        const tempData = await OtpStore.findOne({ email, type: "signup" });
+
+        // Not found OR already expired
+        if (!tempData || tempData.expires < new Date()) {
+            if (tempData) await OtpStore.deleteOne({ email });
+            return res.status(400).json({
+                success: false,
+                error: "OTP expired or invalid session. Please sign up again."
+            });
         }
 
         if (tempData.otp !== otp) {
             return res.status(400).json({ success: false, error: "Invalid OTP code." });
         }
 
+        // Create the verified user
         const newUser = new User({
             username: tempData.username,
-            email: email,
-            password: tempData.password,
-            role: 'user'
+            email,
+            password: tempData.password, // already hashed
+            role: "user"
         });
 
         await newUser.save();
-        otpStore.delete(email);
+        await OtpStore.deleteOne({ email }); // clean up
 
         res.status(201).json({ success: true, message: "Account verified successfully!" });
+
     } catch (err) {
         console.error("VERIFY ERROR:", err);
         res.status(500).json({ success: false, error: "Account creation failed." });
     }
 };
 
+// ─────────────────────────────────────────────
+// RESEND OTP — refreshes code for pending signup
+// ─────────────────────────────────────────────
+
 exports.resendOTP = async (req, res) => {
     try {
         const { email } = req.body;
-        const tempData = otpStore.get(email);
+
+        const tempData = await OtpStore.findOne({ email, type: "signup" });
 
         if (!tempData) {
-            return res.status(400).json({ success: false, error: "Session expired. Signup again." });
+            return res.status(400).json({
+                success: false,
+                error: "Session expired. Please sign up again."
+            });
         }
 
+        // Generate a fresh OTP and reset expiry
         const newOtp = await sendOTP(email);
+
         tempData.otp = newOtp;
-        tempData.expires = Date.now() + 300000;
-        otpStore.set(email, tempData);
+        tempData.expires = new Date(Date.now() + 5 * 60 * 1000);
+        await tempData.save();
 
         res.json({ success: true, message: "New OTP sent!" });
+
     } catch (err) {
         console.error("RESEND ERROR:", err);
-        res.status(500).json({ success: false, error: "Failed to resend email" });
+        res.status(500).json({ success: false, error: "Failed to resend OTP." });
     }
 };
+
+// ─────────────────────────────────────────────
+// FORGOT PASSWORD — sends reset code
+// ─────────────────────────────────────────────
 
 exports.forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
-        const user = await User.findOne({ email });
 
+        const user = await User.findOne({ email });
         if (!user) {
-            return res.status(404).json({ success: false, error: "No account found." });
+            // Return generic message to avoid user enumeration
+            return res.status(200).json({
+                success: true,
+                message: "If that email exists, a verification code has been sent."
+            });
         }
 
-        // Generate a fresh code using the utility
         const resetOtp = await sendOTP(email);
 
-        otpStore.set(email, {
-            email: user.email,
-            otp: resetOtp,
-            type: 'password-reset',
-            expires: Date.now() + 600000 // 10 minutes
+        await OtpStore.findOneAndUpdate(
+            { email },
+            {
+                otp: resetOtp,
+                type: "password-reset",
+                username: undefined,
+                password: undefined,
+                expires: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+            },
+            { upsert: true, new: true }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "If that email exists, a verification code has been sent."
         });
 
-        res.status(200).json({ success: true, message: "Verification code sent." });
     } catch (err) {
         console.error("FORGOT PASSWORD ERROR:", err);
         res.status(500).json({ success: false, error: "Error sending reset code." });
     }
 };
 
+// ─────────────────────────────────────────────
+// RESET PASSWORD WITH OTP
+// ─────────────────────────────────────────────
+
 exports.resetPasswordWithOTP = async (req, res) => {
     try {
         const { email, otp, newPassword } = req.body;
-        const tempData = otpStore.get(email);
 
-        if (!tempData || tempData.type !== 'password-reset' || tempData.expires < Date.now()) {
-            return res.status(400).json({ success: false, error: "Code expired or invalid session." });
+        const tempData = await OtpStore.findOne({ email, type: "password-reset" });
+
+        if (!tempData || tempData.expires < new Date()) {
+            if (tempData) await OtpStore.deleteOne({ email });
+            return res.status(400).json({
+                success: false,
+                error: "Code expired or invalid session."
+            });
         }
 
         if (tempData.otp !== otp) {
@@ -171,55 +211,74 @@ exports.resetPasswordWithOTP = async (req, res) => {
         }
 
         const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ success: false, error: "User not found." });
+        if (!user) {
+            return res.status(404).json({ success: false, error: "User not found." });
+        }
 
-        user.password = newPassword; // Hashing happens in User model pre-save hook
+        // Assign raw password — hashing handled by User model pre-save hook
+        user.password = newPassword;
         await user.save();
 
-        otpStore.delete(email);
+        await OtpStore.deleteOne({ email }); // clean up
 
         res.status(200).json({ success: true, message: "Password reset successful!" });
+
     } catch (err) {
         console.error("RESET ERROR:", err);
         res.status(500).json({ success: false, error: "Failed to reset password." });
     }
 };
 
+// ─────────────────────────────────────────────
+// LOGIN
+// ─────────────────────────────────────────────
+
 exports.postLogin = async (req, res) => {
     try {
         const { email, password, subscription } = req.body;
+
         const user = await User.findOne({ email });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).json({ success: false, error: "Invalid email or password" });
+            return res.status(401).json({
+                success: false,
+                error: "Invalid email or password."
+            });
         }
 
+        // Save push notification subscription if provided
         if (subscription) {
             user.pushSubscription = subscription;
             await user.save();
         }
 
         const token = jwt.sign(
-            { id: user._id, role: user.role }, 
+            { id: user._id, role: user.role },
             process.env.JWT_SECRET || "supersecretkey",
             { expiresIn: "1d" }
         );
 
-        res.cookie("token", token, { 
+        res.cookie("token", token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: 'lax',
-            maxAge: 24 * 60 * 60 * 1000 
+            sameSite: "lax",
+            maxAge: 24 * 60 * 60 * 1000 // 1 day
         });
 
-        const destination = user.role === 'admin' ? '/admin/dashboard' : '/products';
+        const destination = user.role === "admin" ? "/admin/dashboard" : "/products";
         res.status(200).json({ success: true, redirectUrl: destination });
+
     } catch (err) {
-        res.status(500).json({ success: false, error: "Internal Server Error" });
+        console.error("LOGIN ERROR:", err);
+        res.status(500).json({ success: false, error: "Internal Server Error." });
     }
 };
 
-exports.logout = async (req, res) => {
+// ─────────────────────────────────────────────
+// LOGOUT
+// ─────────────────────────────────────────────
+
+exports.logout = (req, res) => {
     res.clearCookie("token");
     res.redirect("/login");
 };
