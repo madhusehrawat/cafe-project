@@ -1,42 +1,55 @@
-require("dotenv").config();
-const nodemailer = require("nodemailer");
 
-// Creates a Gmail transporter using App Password (works on Render)
-const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // TLS
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS  // 16-character Gmail App Password
-    },
-    tls: {
-        rejectUnauthorized: false
-    }
-});
+const { google } = require('googleapis');
+const OAuth2 = google.auth.OAuth2;
 
 const sendMail = async ({ to, subject, html }) => {
-    const mailOptions = {
-        from: `"FullStack Cafe" <${process.env.EMAIL_USER}>`,
-        to,
-        subject,
-        html
-    };
+    const oauth2Client = new OAuth2(
+        process.env.GMAIL_CLIENT_ID,
+        process.env.GMAIL_CLIENT_SECRET,
+        "https://developers.google.com/oauthplayground"
+    );
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully:", info.messageId);
-    return { messageId: info.messageId };
-};
+    // DEBUG: Add this line to check if the token is actually there
+    console.log("Checking Token:", process.env.GMAIL_REFRESH_TOKEN ? "Token Found ✅" : "Token Missing ❌");
 
-const verifyConnection = async () => {
+    oauth2Client.setCredentials({
+        refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    });
+
     try {
-        await transporter.verify();
-        console.log("✅ Nodemailer Gmail connection is ready");
-        return true;
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        // ... rest of the code remains the same
+
+        // 4. Create the email content
+        const str = [
+            `To: ${to}`,
+            `Content-Type: text/html; charset=utf-8`,
+            `MIME-Version: 1.0`,
+            `Subject: ${subject}`,
+            ``,
+            html
+        ].join('\n');
+
+        // 5. Encode the email in Base64URL (Standard for Gmail API)
+        const encodedMail = Buffer.from(str)
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+
+        // 6. Send it!
+        await gmail.users.messages.send({
+            userId: 'me',
+            requestBody: {
+                raw: encodedMail
+            }
+        });
+
+        console.log(`✅ OTP sent successfully to ${to} via Gmail API`);
     } catch (err) {
-        console.error("❌ Mailer verification failed:", err.message);
-        return false;
+        console.error("❌ GMAIL API ERROR:", err);
+        throw err;
     }
 };
 
-module.exports = { sendMail, verifyConnection };
+module.exports = { sendMail };

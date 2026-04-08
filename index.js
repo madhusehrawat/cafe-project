@@ -6,7 +6,7 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const webpush = require('web-push');
 const cors = require('cors');
-
+console.log("TEST ENV:", process.env.GMAIL_CLIENT_ID);                                
 // Database & Models
 const connectDB = require('./config/db');
 const User = require('./models/User');
